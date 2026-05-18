@@ -310,13 +310,7 @@ export function list<T>(
   getKey: (item: T, index: number) => unknown,
   render: (item: T, index: number) => Node
 ): Node {
-  // The list is mounted into a stable anchor — a fragment-like wrapper.
-  // We use a comment node as a stable insertion anchor so the list
-  // can be appended anywhere a single child is expected.
   const anchor = document.createComment('list')
-
-  // A wrapper that holds the rendered children. The renderer's caller
-  // appends this wrapper as a single child via appendChild.
   const wrapper = document.createDocumentFragment()
   wrapper.appendChild(anchor)
 
@@ -324,9 +318,9 @@ export function list<T>(
 
   effect(() => {
     const items = getItems()
-    const parent = anchor.parentNode
+    const parent = anchor.parentNode ?? wrapper
 
-    // First render — just append everything.
+    // First render — append everything.
     if (entries.length === 0 && items.length > 0) {
       const newEntries: ListEntry[] = []
       for (let i = 0; i < items.length; i++) {
@@ -334,11 +328,7 @@ export function list<T>(
         const key = getKey(item, i)
         const node = render(item, i)
         newEntries.push({ key, node, item })
-        if (parent) {
-          parent.insertBefore(node, anchor)
-        } else {
-          wrapper.insertBefore(node, anchor)
-        }
+        parent.insertBefore(node, anchor)
       }
       entries = newEntries
       return
@@ -347,12 +337,16 @@ export function list<T>(
     // Subsequent render — reconcile.
     const oldEntries = entries
     const oldByKey = new Map<unknown, ListEntry>()
-    for (const entry of oldEntries) {
-      oldByKey.set(entry.key, entry)
+    const oldIndexByKey = new Map<unknown, number>()
+    for (let i = 0; i < oldEntries.length; i++) {
+      oldByKey.set(oldEntries[i].key, oldEntries[i])
+      oldIndexByKey.set(oldEntries[i].key, i)
     }
 
     const newEntries: ListEntry[] = []
     const usedKeys = new Set<unknown>()
+    // For each new entry: its old index, or -1 if new.
+    const newToOldIndex: number[] = new Array(items.length)
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
@@ -360,17 +354,17 @@ export function list<T>(
       const existing = oldByKey.get(key)
 
       if (existing) {
-        // Reuse the existing DOM node — possibly moved to a new position.
         newEntries.push({ key, node: existing.node, item })
         usedKeys.add(key)
+        newToOldIndex[i] = oldIndexByKey.get(key)!
       } else {
-        // New key — create a fresh node.
         const node = render(item, i)
         newEntries.push({ key, node, item })
+        newToOldIndex[i] = -1
       }
     }
 
-    // Remove DOM nodes for keys that disappeared.
+    // Remove dead keys.
     for (const entry of oldEntries) {
       if (!usedKeys.has(entry.key)) {
         if (entry.node.parentNode) {
@@ -379,22 +373,74 @@ export function list<T>(
       }
     }
 
-    // Place each node in its new position, in order, before the anchor.
-    // insertBefore on an already-attached node moves it without removing/adding.
-    if (parent) {
-      for (const entry of newEntries) {
-        parent.insertBefore(entry.node, anchor)
+    // Find the longest increasing subsequence of old indices.
+    // Nodes at these positions are already in the correct relative order
+    // and don't need to move.
+    const lisIndices = longestIncreasingSubsequence(newToOldIndex)
+    const inLis = new Set(lisIndices)
+
+    // Walk in REVERSE so we always insertBefore a stable cursor.
+    // Skip nodes that are in the LIS (already in correct position).
+    let cursor: Node = anchor
+    for (let i = newEntries.length - 1; i >= 0; i--) {
+      const entry = newEntries[i]
+      const oldIdx = newToOldIndex[i]
+      if (oldIdx === -1 || !inLis.has(i)) {
+        // New node, or node that moved — needs insertBefore.
+        parent.insertBefore(entry.node, cursor)
       }
-    } else {
-      for (const entry of newEntries) {
-        wrapper.insertBefore(entry.node, anchor)
-      }
+      // Otherwise, the node is already where it should be relative to cursor.
+      cursor = entry.node
     }
 
     entries = newEntries
   })
 
   return wrapper
+}
+
+// ─── Longest Increasing Subsequence ─────────────────────────────────────────
+// Returns the indices (into `arr`) of a longest strictly-increasing
+// subsequence. Entries equal to -1 are treated as "not part of any
+// sequence" and are excluded. O(n log n).
+
+function longestIncreasingSubsequence(arr: number[]): number[] {
+  const n = arr.length
+  if (n === 0) return []
+
+  // piles[k] = index into `arr` of the smallest tail of any
+  // increasing subsequence of length k+1 found so far.
+  const piles: number[] = []
+  // predecessors[i] = index in `arr` of the element preceding arr[i]
+  // in the LIS ending at i.
+  const predecessors = new Array<number>(n).fill(-1)
+
+  for (let i = 0; i < n; i++) {
+    if (arr[i] === -1) continue
+    const x = arr[i]
+
+    // Binary-search for the first pile whose top is >= x.
+    let lo = 0
+    let hi = piles.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (arr[piles[mid]] < x) lo = mid + 1
+      else hi = mid
+    }
+
+    if (lo > 0) predecessors[i] = piles[lo - 1]
+    if (lo === piles.length) piles.push(i)
+    else piles[lo] = i
+  }
+
+  // Reconstruct from the last pile's tail.
+  const result: number[] = []
+  let cur = piles[piles.length - 1]
+  while (cur !== undefined && cur !== -1) {
+    result.push(cur)
+    cur = predecessors[cur]
+  }
+  return result.reverse()
 }
 // ─── Provider wrapping ──────────────────────────────────────────────────────
 // The renderer needs to recognize when a component IS a Context.Provider,
