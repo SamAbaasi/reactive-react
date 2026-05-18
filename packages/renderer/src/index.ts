@@ -299,6 +299,16 @@ function setAttribute(el: HTMLElement, key: string, value: any): void {
 // previous one by key, reusing DOM nodes for matched keys and only creating
 // new ones for new keys. Removed keys produce removed nodes.
 
+// ─── Keyed list reconciliation ──────────────────────────────────────────────
+// ─── Keyed list reconciliation ──────────────────────────────────────────────
+//
+// list(getItems, getKey, render) is the renderer's primitive for arrays.
+// The Babel plugin compiles {items.map(...)} into a list() call.
+//
+// On each signal update, we receive a fresh array. We diff it against the
+// previous one by key, reusing DOM nodes for matched keys and only creating
+// new ones for new keys. Removed keys produce removed nodes.
+
 interface ListEntry {
   key: unknown
   node: Node
@@ -320,21 +330,73 @@ export function list<T>(
     const items = getItems()
     const parent = anchor.parentNode ?? wrapper
 
-    // First render — append everything.
-    if (entries.length === 0 && items.length > 0) {
+    // ── Fast path: clear all ──
+    // Going from a populated list to an empty one is the #1 cost outlier in
+    // benchmarks (clear test was 67ms script). Removing 1000 children one at
+    // a time triggers 1000 layout invalidations. Range.deleteContents() does
+    // it in a single browser operation.
+    if (items.length === 0) {
+      if (entries.length > 0 && entries[0].node.parentNode === parent) {
+        const range = document.createRange()
+        range.setStartBefore(entries[0].node)
+        range.setEndBefore(anchor)
+        range.deleteContents()
+      }
+      entries = []
+      return
+    }
+
+    // ── First render: bulk append via DocumentFragment ──
+    // Building 1000 nodes one-by-one with parent.insertBefore triggers
+    // 1000 insertions. A DocumentFragment defers insertion: append all
+    // nodes to the fragment in memory, then insert the fragment into the
+    // parent in a single browser operation.
+    if (entries.length === 0) {
       const newEntries: ListEntry[] = []
+      const fragment = document.createDocumentFragment()
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
         const key = getKey(item, i)
         const node = render(item, i)
         newEntries.push({ key, node, item })
-        parent.insertBefore(node, anchor)
+        fragment.appendChild(node)
       }
+      parent.insertBefore(fragment, anchor)
       entries = newEntries
       return
     }
 
-    // Subsequent render — reconcile.
+    // ── Fast path: pure append ──
+    // Real-world pattern for "load more" buttons and infinite scroll.
+    // The benchmark 08_create1k-after1k hits this case. Detect by checking
+    // that the first oldEntries.length items have unchanged keys and the
+    // new array is longer; then skip reconciliation entirely.
+    if (items.length > entries.length) {
+      let isPureAppend = true
+      for (let i = 0; i < entries.length; i++) {
+        if (getKey(items[i], i) !== entries[i].key) {
+          isPureAppend = false
+          break
+        }
+      }
+
+      if (isPureAppend) {
+        const newEntries: ListEntry[] = entries.slice()
+        const fragment = document.createDocumentFragment()
+        for (let i = entries.length; i < items.length; i++) {
+          const item = items[i]
+          const key = getKey(item, i)
+          const node = render(item, i)
+          newEntries.push({ key, node, item })
+          fragment.appendChild(node)
+        }
+        parent.insertBefore(fragment, anchor)
+        entries = newEntries
+        return
+      }
+    }
+
+    // ── Subsequent render: reconcile by key ──
     const oldEntries = entries
     const oldByKey = new Map<unknown, ListEntry>()
     const oldIndexByKey = new Map<unknown, number>()
