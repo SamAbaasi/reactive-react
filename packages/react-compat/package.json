@@ -1,0 +1,35 @@
+{
+  "name": "@reactive-react/react-compat",
+  "version": "0.1.0",
+  "description": "React hooks API on top of signals: useState, useEffect, useReducer, useContext, and more",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@reactive-react/signals": "^0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT",
+  "author": "Saman Abaasi <samabaasii@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamAbaasi/reactive-react.git",
+    "directory": "packages/react-compat"
+  },
+  "keywords": ["react", "hooks", "compatibility", "signals", "useState", "useEffect"]
+}

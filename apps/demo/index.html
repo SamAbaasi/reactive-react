@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Reactive React — Counter Demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 600px;
+        margin: 4rem auto;
+        padding: 2rem;
+        background: #0f0f17;
+        color: #e8e8f0;
+      }
+      h1 { color: #8b94ff; margin-bottom: 0.5rem; }
+      .meta { color: #888; margin-bottom: 2rem; font-size: 14px; }
+      button {
+        background: #4a5fff;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-right: 12px;
+      }
+      button:hover { background: #5a6fff; }
+      .display {
+        font-size: 32px;
+        margin: 1.5rem 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .log {
+        margin-top: 2rem;
+        padding: 1rem;
+        background: #1a1a26;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 13px;
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Reactive React</h1>
+    <p class="meta">A signal-based UI library. The component runs once. Signals write directly to the DOM.</p>
+    <div id="app"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
