@@ -81,6 +81,6 @@ Most React code translates with three rules:
 
 1. Outside JSX, call state getters: `count` becomes `count()`
 2. `setCount(count + 1)` becomes `setCount(count() + 1)`
-3. Replace `react`/`react-dom` imports with `@reactive-react/react-compat` and `@reactive-react/renderer`
+3. Replace `react`/`react-dom` imports with `@rrjs/react-compat` and `@rrjs/renderer`
 
 See [`MIGRATION.md`](./MIGRATION.md) for full setup.

@@ -3,7 +3,7 @@
 This document walks through using Reactive React in place of React. The library is API-compatible enough that most existing components translate with two rules:
 
 1. Reactive state is read through getters: `count()` not `count`
-2. Imports change from `react` / `react-dom` to `@reactive-react/react-compat` and `@reactive-react/renderer`
+2. Imports change from `react` / `react-dom` to `@rrjs/react-compat` and `@rrjs/renderer`
 
 ---
 
@@ -12,7 +12,7 @@ This document walks through using Reactive React in place of React. The library 
 ### Install
 
 ```bash
-npm install @reactive-react/signals @reactive-react/renderer @reactive-react/react-compat
+npm install @rrjs/signals @rrjs/renderer @rrjs/react-compat
 npm install -D babel-plugin-reactive-react @babel/core @babel/preset-typescript
 ```
 
@@ -22,7 +22,7 @@ npm install -D babel-plugin-reactive-react @babel/core @babel/preset-typescript
 // vite.config.ts
 import { defineConfig } from 'vite'
 import babel from '@babel/core'
-import reactiveReact from 'babel-plugin-reactive-react'
+import reactiveReact from '@rrjs/babel-plugin'
 
 export default defineConfig({
   esbuild: {
@@ -87,7 +87,7 @@ esbuild does not support Babel plugins natively. Use the Vite or Webpack setup a
 In your application's entry file, make `h` globally available — the Babel plugin compiles JSX to `h()` calls and assumes `h` is in scope:
 
 ```ts
-import { h } from '@reactive-react/renderer'
+import { h } from '@rrjs/renderer'
 ;(globalThis as any).h = h
 ```
 
@@ -118,7 +118,7 @@ function Counter() {
 ### After (Reactive React)
 
 ```tsx
-import { useState, useEffect } from '@reactive-react/react-compat'
+import { useState, useEffect } from '@rrjs/react-compat'
 
 function Counter() {
   const [count, setCount] = useState(0)
@@ -136,14 +136,14 @@ function Counter() {
 ```
 
 Three changes:
-1. Import from `@reactive-react/react-compat`
+1. Import from `@rrjs/react-compat`
 2. Inside `useEffect` and `setCount`, read state with `count()`
 3. JSX expressions don't change — the Babel plugin handles them
 
 ### Mount
 
 ```tsx
-import { mount } from '@reactive-react/renderer'
+import { mount } from '@rrjs/renderer'
 mount(Counter, document.getElementById('app')!)
 ```
 
@@ -208,7 +208,7 @@ The cleanup closure captures `count` (the getter), which always reads the curren
 For `.map()` over arrays where items can change, use the `list()` primitive directly:
 
 ```tsx
-import { list } from '@reactive-react/renderer'
+import { list } from '@rrjs/renderer'
 
 function TodoList() {
   const [todos] = useState<Todo[]>([])
@@ -235,7 +235,7 @@ You can also use plain `.map()` for static lists that never change — it works,
 External state libraries (Redux, Zustand, Jotai) work via `useSyncExternalStore`:
 
 ```tsx
-import { useSyncExternalStore } from '@reactive-react/react-compat'
+import { useSyncExternalStore } from '@rrjs/react-compat'
 
 function Counter({ store }) {
   const state = useSyncExternalStore(store.subscribe, store.getState)
@@ -272,7 +272,7 @@ Add a global type declaration:
 ```ts
 // src/global.d.ts
 declare global {
-  const h: typeof import('@reactive-react/renderer').h
+  const h: typeof import('@rrjs/renderer').h
 }
 ```
 

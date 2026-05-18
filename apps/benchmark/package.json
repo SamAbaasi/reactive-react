@@ -8,12 +8,12 @@
     "preview": "vite preview --port 8080 --strictPort"
   },
   "dependencies": {
-    "@reactive-react/signals": "file:../../packages/signals",
-    "@reactive-react/renderer": "file:../../packages/renderer",
-    "@reactive-react/react-compat": "file:../../packages/react-compat"
+    "@rrjs/signals": "file:../../packages/signals",
+    "@rrjs/renderer": "file:../../packages/renderer",
+    "@rrjs/react-compat": "file:../../packages/react-compat"
   },
   "devDependencies": {
-    "babel-plugin-reactive-react": "file:../../packages/babel-plugin",
+    "@rrjs/babel-plugin": "file:../../packages/babel-plugin",
     "@babel/core": "^7.24.0",
     "@babel/preset-typescript": "^7.24.0",
     "vite": "^5.0.0",

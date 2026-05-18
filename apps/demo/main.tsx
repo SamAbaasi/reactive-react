@@ -1,10 +1,10 @@
-import { mount } from '@reactive-react/renderer'
+import { mount } from '@rrjs/renderer'
 import {
   useState,
   useMemo,
   useEffect,
-} from '@reactive-react/react-compat'
-import { h } from '@reactive-react/renderer'
+} from '@rrjs/react-compat'
+import { h } from '@rrjs/renderer'
 
 ;(globalThis as any).h = h
 

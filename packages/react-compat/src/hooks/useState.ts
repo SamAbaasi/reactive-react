@@ -1,4 +1,4 @@
-import { createSignal } from '@reactive-react/signals'
+import { createSignal } from '@rrjs/signals'
 import { getCurrentInstance } from '../instance'
 
 // React-shim useState — but honest about JavaScript's constraints.

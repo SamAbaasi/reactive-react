@@ -14,11 +14,11 @@ If you understand SolidJS, you already understand 80% of this. If you understand
 ├─────────────────────────────────────────┤
 │      babel-plugin-reactive-react        │   compiles JSX to h()
 ├─────────────────────────────────────────┤
-│       @reactive-react/react-compat      │   useState, useEffect, ...
+│       @rrjs/react-compat      │   useState, useEffect, ...
 ├─────────────────────────────────────────┤
-│       @reactive-react/renderer          │   h(), mount(), list()
+│       @rrjs/renderer          │   h(), mount(), list()
 ├─────────────────────────────────────────┤
-│       @reactive-react/signals           │   createSignal, computed, effect
+│       @rrjs/signals           │   createSignal, computed, effect
 └─────────────────────────────────────────┘
 ```
 

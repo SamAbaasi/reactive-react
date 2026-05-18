@@ -1,4 +1,4 @@
-import { computed } from '@reactive-react/signals'
+import { computed } from '@rrjs/signals'
 import { getCurrentInstance } from '../instance'
 
 interface UseMemoHook<T> {

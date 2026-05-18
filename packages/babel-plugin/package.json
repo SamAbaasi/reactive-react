@@ -1,6 +1,6 @@
 {
-  "name": "babel-plugin-reactive-react",
-  "version": "0.1.0",
+  "name": "@rrjs/babel-plugin",
+  "version": "0.1.1",
   "description": "Babel plugin that compiles JSX to h() calls with reactive bindings for Reactive React",
   "type": "module",
   "main": "./dist/index.js",

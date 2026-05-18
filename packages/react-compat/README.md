@@ -1,18 +1,18 @@
-# @reactive-react/react-compat
+# @rrjs/react-compat
 
 React hooks implemented on top of signals. Designed so React code translates with minimal changes: state is read through a getter (`count()` instead of `count`). Inside JSX the Babel plugin handles this automatically.
 
 ## Install
 
 ```bash
-npm install @reactive-react/react-compat @reactive-react/signals @reactive-react/renderer
+npm install @rrjs/react-compat @rrjs/signals @rrjs/renderer
 ```
 
 ## Quick start
 
 ```js
-import { useState, useEffect, useMemo } from '@reactive-react/react-compat'
-import { h, mount } from '@reactive-react/renderer'
+import { useState, useEffect, useMemo } from '@rrjs/react-compat'
+import { h, mount } from '@rrjs/renderer'
 
 function Counter() {
   const [count, setCount] = useState(0)
@@ -52,7 +52,7 @@ mount(Counter, document.getElementById('app'))
 ## Forwarding refs
 
 ```js
-import { forwardRef, useRef } from '@reactive-react/react-compat'
+import { forwardRef, useRef } from '@rrjs/react-compat'
 
 const FancyInput = forwardRef((props, ref) =>
   h('input', { ref, type: 'text', ...props })
@@ -67,7 +67,7 @@ function Form() {
 ## Context
 
 ```js
-import { createContext, useContext } from '@reactive-react/react-compat'
+import { createContext, useContext } from '@rrjs/react-compat'
 
 const ThemeContext = createContext('light')
 
@@ -88,7 +88,7 @@ Nested providers are supported. Each `Provider` push is paired with a pop after 
 ## External stores (Redux, Zustand, etc.)
 
 ```js
-import { useSyncExternalStore } from '@reactive-react/react-compat'
+import { useSyncExternalStore } from '@rrjs/react-compat'
 
 function Counter({ store }) {
   const state = useSyncExternalStore(store.subscribe, store.getState)

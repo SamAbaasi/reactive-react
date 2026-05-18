@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { h, mount, unmountNode } from '../src/index'
-import { useEffect, useState, useLayoutEffect } from '@reactive-react/react-compat'
+import { useEffect, useState, useLayoutEffect } from '@rrjs/react-compat'
 
 function nextMacroTask(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0))

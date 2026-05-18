@@ -1,4 +1,4 @@
-import { effect, computed } from '@reactive-react/signals'
+import { effect, computed } from '@rrjs/signals'
 import {
   createInstance,
   withInstance,
@@ -9,7 +9,7 @@ import {
   type Context,
   isForwardRef,
     type ComponentInstance,
-} from '@reactive-react/react-compat'
+} from '@rrjs/react-compat'
 
 // ─── Instance tracking ──────────────────────────────────────────────────────
 // We need to track which component instance produced each DOM node so we can

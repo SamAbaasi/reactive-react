@@ -1,4 +1,4 @@
-import { h, mount, list } from '@reactive-react/renderer'
+import { h, mount, list } from '@rrjs/renderer'
 import { App } from './app'
 
 ;(globalThis as any).h = h

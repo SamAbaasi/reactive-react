@@ -1,18 +1,18 @@
-# @reactive-react/renderer
+# @rrjs/renderer
 
 The DOM renderer. Mounts components, manages reactive bindings between signals and DOM nodes, and reconciles keyed lists.
 
 ## Install
 
 ```bash
-npm install @reactive-react/renderer @reactive-react/signals
+npm install @rrjs/renderer @rrjs/signals
 ```
 
 ## Quick start
 
 ```js
-import { h, mount } from '@reactive-react/renderer'
-import { createSignal } from '@reactive-react/signals'
+import { h, mount } from '@rrjs/renderer'
+import { createSignal } from '@rrjs/signals'
 
 const [count, setCount] = createSignal(0)
 
@@ -71,7 +71,7 @@ When the array changes, existing DOM nodes are reused for matched keys. Use stab
 Refs work on both DOM elements and `forwardRef` components.
 
 ```js
-import { useRef } from '@reactive-react/react-compat'
+import { useRef } from '@rrjs/react-compat'
 
 function Form() {
   const inputRef = useRef(null)
@@ -84,7 +84,7 @@ function Form() {
 
 ## With JSX
 
-Use `babel-plugin-reactive-react` to write JSX that compiles to `h()` calls with the right thunks. See [`babel-plugin-reactive-react`](../babel-plugin) for setup.
+Use `@rrjs/babel-plugin` to write JSX that compiles to `h()` calls with the right thunks. See [`@rrjs/babel-plugin`](../babel-plugin) for setup.
 
 ## License
 MIT License

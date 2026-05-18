@@ -1,5 +1,5 @@
 {
-  "name": "@reactive-react/signals",
+  "name": "@rrjs/signals",
   "version": "0.1.0",
   "description": "Fine-grained reactive primitives: createSignal, computed, effect, batch",
   "type": "module",

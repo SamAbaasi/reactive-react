@@ -3,8 +3,8 @@ import {
   useMemo,
   useEffect,
   useRef,
-} from '@reactive-react/react-compat'
-import { h, list } from '@reactive-react/renderer'
+} from '@rrjs/react-compat'
+import { h, list } from '@rrjs/renderer'
 
 interface TodoItemProps {
   todo: Todo

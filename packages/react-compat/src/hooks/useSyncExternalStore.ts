@@ -1,4 +1,4 @@
-import { createSignal, effect } from '@reactive-react/signals'
+import { createSignal, effect } from '@rrjs/signals'
 import { getCurrentInstance } from '../instance'
 
 type Subscribe = (onStoreChange: () => void) => () => void

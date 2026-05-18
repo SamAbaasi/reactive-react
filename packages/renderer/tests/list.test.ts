@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createSignal } from '@reactive-react/signals'
+import { createSignal } from '@rrjs/signals'
 import { h, mount, list } from '../src/index'
 
 describe('list()', () => {

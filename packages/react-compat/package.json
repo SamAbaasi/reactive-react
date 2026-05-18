@@ -1,5 +1,5 @@
 {
-  "name": "@reactive-react/react-compat",
+  "name": "@rrjs/react-compat",
   "version": "0.1.0",
   "description": "React hooks API on top of signals: useState, useEffect, useReducer, useContext, and more",
   "type": "module",
@@ -17,7 +17,7 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@reactive-react/signals": "^0.1.0"
+    "@rrjs/signals": "file:../signals"
   },
   "devDependencies": {
     "vitest": "^1.0.0",

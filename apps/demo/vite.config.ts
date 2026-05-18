@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import babel from '@babel/core'
-import reactiveReactPlugin from 'babel-plugin-reactive-react'
+import reactiveReactPlugin from '@rrjs/babel-plugin'
 
 export default defineConfig({
   esbuild: {

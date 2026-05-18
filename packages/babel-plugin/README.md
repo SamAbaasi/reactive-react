@@ -1,11 +1,11 @@
-# babel-plugin-reactive-react
+# @rrjs/babel-plugin
 
-Babel plugin that compiles JSX to `h()` calls compatible with `@reactive-react/renderer`. Dynamic expressions inside JSX are wrapped in thunks so the renderer can establish reactive bindings.
+Babel plugin that compiles JSX to `h()` calls compatible with `@rrjs/renderer`. Dynamic expressions inside JSX are wrapped in thunks so the renderer can establish reactive bindings.
 
 ## Install
 
 ```bash
-npm install -D babel-plugin-reactive-react @babel/core
+npm install -D @rrjs/babel-plugin @babel/core
 ```
 
 ## Setup
@@ -16,7 +16,7 @@ npm install -D babel-plugin-reactive-react @babel/core
 // vite.config.ts
 import { defineConfig } from 'vite'
 import babel from '@babel/core'
-import reactiveReact from 'babel-plugin-reactive-react'
+import reactiveReact from '@rrjs/babel-plugin'
 
 export default defineConfig({
   esbuild: { jsx: 'preserve' },
@@ -42,7 +42,7 @@ export default defineConfig({
 In your entry file:
 
 ```js
-import { h } from '@reactive-react/renderer'
+import { h } from '@rrjs/renderer'
 ;(globalThis as any).h = h
 ```
 

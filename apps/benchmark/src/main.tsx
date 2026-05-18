@@ -1,5 +1,5 @@
-import { h, mount, list } from '@reactive-react/renderer'
-import { createSignal, batch } from '@reactive-react/signals'
+import { h, mount, list } from '@rrjs/renderer'
+import { createSignal, batch } from '@rrjs/signals'
 // ─── Diagnostic: count DOM writes per state change ──────────────────────────
 let mutationCount = 0
 const _origSetAttribute = Element.prototype.setAttribute

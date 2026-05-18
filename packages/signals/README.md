@@ -1,17 +1,17 @@
-# @reactive-react/signals
+# @rrjs/signals
 
 The reactive primitive layer. Used by every other package in the Reactive React project. Can be used directly when you need fine-grained reactivity without a UI library.
 
 ## Install
 
 ```bash
-npm install @reactive-react/signals
+npm install @rrjs/signals
 ```
 
 ## Quick start
 
 ```js
-import { createSignal, effect, computed } from '@reactive-react/signals'
+import { createSignal, effect, computed } from '@rrjs/signals'
 
 const [count, setCount] = createSignal(0)
 const doubled = computed(() => count() * 2)

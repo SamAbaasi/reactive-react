@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import babel from '@babel/core'
-import reactiveReact from 'babel-plugin-reactive-react'
+import reactiveReact from '@rrjs/babel-plugin'
 
 export default defineConfig({
   base: './',

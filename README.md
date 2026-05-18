@@ -3,8 +3,8 @@
 A signal-based UI library with a React-compatible API. Components run once. Signals update the DOM directly. No VDOM, no reconciliation tax.
 
 ```jsx
-import { mount, h } from '@reactive-react/renderer'
-import { useState, useMemo } from '@reactive-react/react-compat'
+import { mount, h } from '@rrjs/renderer'
+import { useState, useMemo } from '@rrjs/react-compat'
 
 function Counter() {
   const [count, setCount] = useState(0)
@@ -35,16 +35,16 @@ The frontend industry has converged on signals. Angular 20, Vue 4 Vapor Mode, So
 
 | Package | What it is |
 |---|---|
-| [`@reactive-react/signals`](./packages/signals) | The signal primitives: `createSignal`, `computed`, `effect`, `batch` |
-| [`@reactive-react/react-compat`](./packages/react-compat) | React hooks on top of signals: `useState`, `useEffect`, `useMemo`, `useReducer`, `useContext`, `forwardRef`, `useSyncExternalStore`, and more |
-| [`@reactive-react/renderer`](./packages/renderer) | The DOM renderer: `h()`, `mount()`, `list()` |
-| [`babel-plugin-reactive-react`](./packages/babel-plugin) | JSX transform that wraps dynamic expressions in thunks |
+| [`@rrjs/signals`](./packages/signals) | The signal primitives: `createSignal`, `computed`, `effect`, `batch` |
+| [`@rrjs/react-compat`](./packages/react-compat) | React hooks on top of signals: `useState`, `useEffect`, `useMemo`, `useReducer`, `useContext`, `forwardRef`, `useSyncExternalStore`, and more |
+| [`@rrjs/renderer`](./packages/renderer) | The DOM renderer: `h()`, `mount()`, `list()` |
+| [`@rrjs/babel-plugin`](./packages/babel-plugin) | JSX transform that wraps dynamic expressions in thunks |
 
 ## Installation
 
 ```bash
-npm install @reactive-react/signals @reactive-react/renderer @reactive-react/react-compat
-npm install -D babel-plugin-reactive-react
+npm install @rrjs/signals @rrjs/renderer @rrjs/react-compat
+npm install -D @rrjs/babel-plugin
 ```
 
 ## Status

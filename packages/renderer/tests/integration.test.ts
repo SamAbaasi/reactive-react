@@ -7,8 +7,8 @@ import {
   useRef,
   useImperativeHandle,
   useCallback,
-} from '@reactive-react/react-compat'
-import { forwardRef } from '@reactive-react/react-compat'
+} from '@rrjs/react-compat'
+import { forwardRef } from '@rrjs/react-compat'
 
 function nextMacroTask(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0))
