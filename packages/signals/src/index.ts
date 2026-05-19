@@ -154,3 +154,4 @@ export function batch(fn: () => void): void {
     flushIfNeeded()
   }
 }
+

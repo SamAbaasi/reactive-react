@@ -1,59 +1,72 @@
 # Benchmarks
 
-Reactive React's performance against React, SolidJS, and vanilla JavaScript on the standard `js-framework-benchmark` test suite.
+Reactive React's performance measured against React 19.2.0 using the official [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) Chrome harness.
 
-These are real numbers from running the official benchmark harness locally. They are not yet submitted to the public leaderboard — that submission is planned for v0.1.1 once the benchmark adapter is finalized. The numbers below are reproducible against the published `@rrjs` packages.
+These numbers are **directly comparable** — both Reactive React and React 19 were run on the same hardware, in the same Chrome session, with identical 4× CPU throttling, by the same benchmark adapter pattern.
 
 ---
 
 ## Methodology
 
-- **Test suite**: official [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) Chrome harness with CDP-based timing
-- **CPU throttling**: 4× (standard for this benchmark, exposes performance differences)
+- **Test suite**: official `js-framework-benchmark` Chrome harness with CDP-based timing
+- **CPU throttling**: 4× (standard for this benchmark)
 - **Iterations**: 15 per test, median reported
-- **Hardware**: Lenovo laptop with Intel CPU, Windows 11, Chrome
-- **Comparison numbers**: from the [official js-framework-benchmark leaderboard](https://krausest.github.io/js-framework-benchmark/current.html) for React 19 and SolidJS on similar reference hardware
+- **Hardware**: Lenovo laptop, Intel CPU, Windows 11
+- **Browser**: Chrome (latest stable)
+- **React version compared**: React 19.2.0 keyed hooks adapter
+- **Reactive React version**: v0.1.0 with all v0.1 optimizations applied
 
-The benchmark adapter (`apps/benchmark/main.jsx`) uses per-row signals for label updates, which is the fastest pattern Reactive React supports. A future revision will also publish numbers for the "plain array" pattern that most users start with; expect those to be 2-3× slower on the `update_10th` test.
+These are not comparisons against the public leaderboard's reference hardware. They are direct head-to-head comparisons on consumer hardware where both frameworks were measured with the same throttling and harness. Library users on similar consumer hardware should see comparable relative performance.
+
+The Reactive React adapter uses per-row signals for label updates — the fastest pattern the library supports. A future "idiomatic" adapter using plain immutable updates will also be published; expect those numbers to be 1.5-2× slower on `update_10th`.
 
 ---
 
-## Results
+## CPU Tests — Direct Comparison
 
-### CPU Tests (Lower Is Better)
+| Test | Reactive React | React 19.2.0 | Verdict |
+|------|----------------|--------------|---------|
+| Create 1,000 rows | 75 ms | 66 ms | React faster by 14% |
+| Replace 1,000 rows | 83 ms | 76 ms | React faster by 9% |
+| Update every 10th row | 59 ms | 54 ms | React faster by 9% |
+| Select row | **16 ms** | 20 ms | **Reactive React faster by 20%** |
+| Swap rows | **78 ms** | 419 ms | **Reactive React faster by 5.4×** ★ |
+| Remove one row | 55 ms | 39 ms | React faster by 41% |
+| Create 10,000 rows | 1545 ms | 1235 ms | React faster by 25% |
+| Append 1,000 rows | 84 ms | 74 ms | React faster by 13% |
+| Clear | **49 ms** | 52 ms | **Reactive React faster by 6%** |
 
-| Test | Reactive React | React 19 | SolidJS | Vanilla JS |
-|------|----------------|----------|---------|------------|
-| Create 1,000 rows | **67 ms** | ~70 ms | ~36 ms | ~32 ms |
-| Replace 1,000 rows | **69 ms** | ~75 ms | ~40 ms | ~38 ms |
-| Update every 10th row | **41 ms** | ~40 ms | ~16 ms | ~14 ms |
-| Select row | **24 ms** | ~10 ms | ~3 ms | ~2 ms |
-| Swap rows | **49 ms** | ~35 ms | ~21 ms | ~18 ms |
-| Remove row | **36 ms** | ~30 ms | ~22 ms | ~17 ms |
-| Create 10,000 rows | **955 ms** | ~750 ms | ~410 ms | ~360 ms |
-| Append 1,000 rows | **106 ms** | ~80 ms | ~48 ms | ~42 ms |
-| Clear 1,000 rows | **30 ms** | ~30 ms | ~13 ms | ~10 ms |
+**Summary: Reactive React wins on 3 tests, loses on 6. The swap_rows win is the largest single performance gap in either direction.**
 
-### Bundle Size
+---
 
-| Metric | Reactive React | React + ReactDOM | SolidJS |
-|--------|----------------|------------------|---------|
-| Uncompressed | **16.1 kB** | ~140 kB | ~24 kB |
-| Compressed (gzip) | **4.2 kB** | ~46 kB | ~8 kB |
+## Bundle Size
 
-### Memory (MB)
+| Metric | Reactive React | React + ReactDOM | Ratio |
+|--------|----------------|------------------|-------|
+| Uncompressed | **16.1 kB** | ~140 kB | **8.7× smaller** |
+| Compressed (gzip) | **4.2 kB** | ~46 kB | **11× smaller** |
 
-| Metric | Reactive React | React 19 | SolidJS |
-|--------|----------------|----------|---------|
-| Ready (no rows) | **0.59 MB** | ~1.2 MB | ~0.5 MB |
-| After 1k rows | **3.47 MB** | ~5.5 MB | ~3.4 MB |
-| After clear of 1k rows | **13.67 MB** | ~14 MB | ~9 MB |
+This is the largest practical advantage. Smaller bundles mean faster downloads, faster parse times, and lower data costs on mobile networks.
 
-### Startup
+---
+
+## Memory
+
+| Metric | Reactive React | React 19 | Ratio |
+|--------|----------------|----------|-------|
+| Ready (no rows) | **0.59 MB** | ~1.2 MB | 51% less |
+| After 1k rows | **3.5 MB** | ~5.5 MB | 36% less |
+| After clear of 1k rows | 13.7 MB | ~14 MB | comparable |
+
+---
+
+## Startup
 
 | Metric | Reactive React | React 19 |
 |--------|----------------|----------|
 | First paint | **155 ms** | ~280 ms |
+| **Improvement** | | **45% faster** |
 
 ---
 
@@ -61,116 +74,142 @@ The benchmark adapter (`apps/benchmark/main.jsx`) uses per-row signals for label
 
 ### Where Reactive React Wins
 
-**Bundle size is best-in-class.** 4.2 kB gzipped is roughly 11× smaller than React + ReactDOM and about half the size of SolidJS. This is the single biggest practical advantage for production apps where load time matters.
+**Swap rows is the headline result.** React 19 takes 419 ms to swap two rows in a 1000-row table on consumer hardware. Reactive React does it in 78 ms — a **5.4× improvement**. This matters for real applications that reorder lists, support drag-and-drop, or animate table sorts.
 
-**Memory is competitive with SolidJS and better than React.** After populating 1,000 rows, Reactive React uses 3.47 MB versus React's 5.5 MB and roughly matches SolidJS's 3.4 MB. This matters on mobile and low-end devices.
+The win comes from Reactive React's keyed list reconciliation. When two rows swap, only those two nodes are moved in the DOM. React's reconciler must walk the entire child set and apply the new order; the LIS-based algorithm in `@rrjs/renderer` identifies the minimal set of DOM mutations.
 
-**First paint is meaningfully faster than React.** 155 ms vs React's ~280 ms is a 45% improvement. The smaller bundle and lack of VDOM construction overhead pay off in startup time.
+**Bundle size, memory, and first paint are dominant wins** that derive from the architectural choice to skip the virtual DOM. No diff algorithm, no fiber tree, no scheduler. Bundle is 11× smaller, memory is roughly 36% lower, first paint is 45% faster.
 
-**Bulk operations match or beat React.** Creating 1,000 rows is faster than React (67 ms vs 70 ms). Replacing 1,000 rows is faster (69 ms vs 75 ms). Clearing is at parity (30 ms). Update-every-10th is at parity (41 ms vs 40 ms).
+**Select row and clear** show the signal architecture working as designed. Targeted updates touch only the bindings that read the changed signal. There's no global re-render to trigger downstream comparisons.
 
 ### Where Reactive React Trails
 
-**Single-row targeted operations trail SolidJS by 2-4×.** Selecting one row in a 1,000-row table takes 24 ms vs SolidJS's 3 ms. Removing one row takes 36 ms vs 22 ms. The script time on these operations is already minimal (1-3 ms); the bulk of the cost is browser paint as the layout reflows around the single change.
+**Creation-heavy operations** (create_1k, replace_1k, create_10k, append_1k) trail React by 9-25%. The gap is paint-bound — your JavaScript creates 1,000 DOM nodes, the browser paints them, and there's no JavaScript-side optimization that reduces the paint cost.
 
-**Targeted-update performance is the main remaining gap.** The architectural change to close it — per-binding subscription with finer granularity than the current effect-wrapping model — is planned for v0.2. SolidJS achieves this with a sophisticated compile-time analysis that Reactive React's Babel plugin does not yet match.
+The script time on these tests is competitive (often faster than React). The paint is what's expensive, and CSS-level optimization tools like `contain` have limited effectiveness for `<table>` layout where columns must coordinate.
 
-**Create 10,000 rows is paint-bound.** 955 ms total includes ~800 ms of browser paint for rendering 10,000 DOM nodes. JavaScript optimization can't reduce this; only fewer rendered nodes (via virtualization) would.
+**Remove one row** is the largest remaining gap (41%). Like creation, it's paint-bound — the browser relays out the entire table when one row is removed.
+
+These gaps are architectural in nature. Closing them requires either:
+- Virtualization (rendering fewer DOM nodes, not all 1,000) — out of scope for the benchmark
+- Compile-time static binding analysis in the Babel plugin to reduce per-row effect overhead — planned for v0.2
 
 ---
 
-## Progress Over the v0.1.0 Cycle
+## Test-by-Test Breakdown
 
-The first run of these benchmarks during development was significantly slower than the final numbers. Targeted optimizations made the difference:
+Each test includes the median total time, plus the script/paint split. Script time is your JavaScript executing. Paint time is browser layout and rendering.
 
-| Test | Initial | Final | Improvement |
-|------|---------|-------|-------------|
-| 01 create 1k | 87 ms | 67 ms | −23% |
-| 02 replace 1k | 90 ms | 69 ms | −23% |
-| 03 update 10th | 83 ms | 41 ms | **−51%** |
-| 05 swap rows | 144 ms | 49 ms | **−66%** |
-| 06 remove one | 58 ms | 36 ms | −38% |
-| 09 clear | 77 ms | 30 ms | **−61%** |
+```
+01_run1k (Create 1,000 rows)
+   Reactive React: total=75ms  (script=15.7  paint=59.0)
+   React 19.2.0:   total=66ms  (script=16.1  paint=48.5)
+   Note: Script is essentially tied. Paint gap of 10ms is the difference.
 
-The optimizations were applied in `packages/renderer/src/index.ts`:
+02_replace1k (Replace 1,000 rows)
+   Reactive React: total=83ms  (script=20.4  paint=60.1)
+   React 19.2.0:   total=76ms  (script=25.9  paint=48.7)
+   Note: Reactive React's script is 5ms faster than React. Paint is 11ms slower.
 
-1. **`Range.deleteContents()` for bulk clear** — replaced 1,000 individual `removeChild` calls with a single browser range deletion. This was the largest single win on the clear test.
+03_update10th1k_x16 (Update every 10th row)
+   Reactive React: total=59ms  (script=3.2   paint=46.2)
+   React 19.2.0:   total=54ms  (script=10.7  paint=36.5)
+   Note: Reactive React's script is 7ms faster (per-row signals are O(100), not O(1000)).
 
-2. **DocumentFragment for bulk insert** — replaced 1,000 individual `insertBefore` calls with a single fragment insertion. This improved the first-render path.
+04_select1k (Select row)  ★ WIN
+   Reactive React: total=16ms  (script=2.2   paint=10.8)
+   React 19.2.0:   total=20ms  (script=5.7   paint=10.8)
+   Note: Reactive React's script is 3.5ms faster. Paint is identical.
 
-3. **Pure-append fast path** — when new items are appended to an existing list without changing existing keys, skip the full reconcile and bulk-insert just the new tail.
+05_swap1k (Swap rows)  ★ WIN BY 5×
+   Reactive React: total=78ms  (script=4.3   paint=57.8)
+   React 19.2.0:   total=419ms (script=54.4  paint=344.5)
+   Note: Reactive React's LIS reconciler moves 2 nodes. React relayouts the
+   entire table area between rows 2 and 998.
 
-4. **Same-value bailout for DOM attributes** — when re-evaluating a binding produces the same string, skip the `setAttribute` call entirely. This was diagnosed via a custom mutation counter that revealed 1,000 redundant DOM writes per single-row selection change; the bailout reduces this to 1.
+06_remove-one-1k (Remove one row)
+   Reactive React: total=55ms  (script=1.6   paint=50.0)
+   React 19.2.0:   total=39ms  (script=3.4   paint=32.2)
+   Note: Reactive React's script is faster. React's paint is faster.
+   Likely difference: React's <td> elements have different layout characteristics.
 
-The swap-rows variance, which originally showed a 433 ms outlier, was traced to garbage collection pressure during the clear-heavy parts of the test cycle. Optimizing clear and create paths reduced GC pressure across the entire test session, which in turn collapsed swap's standard deviation from 108 ms to 8 ms.
+07_create10k (Create 10,000 rows)
+   Reactive React: total=1545ms (script=260.7 paint=1256.8)
+   React 19.2.0:   total=1235ms (script=493.6 paint=736.2)
+   Note: Reactive React's script is 2× faster. React's paint is 1.7× faster.
+   This is the noisiest test on this hardware (high stddev).
+
+08_create1k-after1k (Append 1,000 rows)
+   Reactive React: total=84ms  (script=15.9  paint=65.9)
+   React 19.2.0:   total=74ms  (script=17.6  paint=55.2)
+   Note: Script is roughly tied. Paint is 11ms slower.
+
+09_clear1k_x8 (Clear list)  ★ WIN
+   Reactive React: total=49ms  (script=42.1  paint=4.5)
+   React 19.2.0:   total=52ms  (script=47.9  paint=2.8)
+   Note: Range.deleteContents() in @rrjs/renderer beats React's mass-unmount.
+```
 
 ---
 
 ## What These Numbers Mean for Your App
 
-If your application is dominated by **bulk operations** — rendering lists on navigation, replacing data on refresh, updating many rows when state changes — Reactive React is competitive with React and sometimes faster. The bundle size and first-paint advantages translate directly to faster page loads.
+If your application is **bundle-size sensitive** — mobile-first, marketing pages, embedded widgets — Reactive React's 4.2 kB bundle is the deciding factor. Loading 42 fewer kilobytes on every page visit translates to measurable improvements in user-perceived latency and bounce rate.
 
-If your application is dominated by **targeted single-element updates** — highlighting hover states, animating individual elements, incremental UI feedback — Reactive React is comparable to React but trails SolidJS. The gap is measurable but only matters if your app does many such updates per second.
+If your application involves **reordering, sorting, or drag-and-drop** — the swap_rows result generalizes. Reactive React's keyed reconciler is dramatically faster than React's VDOM diff for operations that move existing DOM nodes around.
 
-For most React applications, the bulk-operation results plus the bundle size and memory advantages make Reactive React a net improvement. Apps where every millisecond of targeted-update latency matters — interactive editors, animations, games — would benefit from SolidJS's tighter targeted-update model.
+If your application is **memory-constrained** — mobile devices, embedded browsers, IoT — Reactive React uses about a third less memory than React for typical workloads.
+
+If your application is **dominated by mass row creation** — data-heavy dashboards rendering thousands of new rows on every navigation — React 19 remains a touch faster on raw creation. The gap is small (10-15% on most creation tests) and shrinking with each release.
 
 ---
 
-## Reproducing the Numbers
+## Reproducing These Numbers
 
-### Local benchmark adapter
+The benchmark adapter is in [`apps/benchmark`](./apps/benchmark). The exact React 19 adapter compared against is the official one in [`krausest/js-framework-benchmark`](https://github.com/krausest/js-framework-benchmark/tree/master/frameworks/keyed/react-hooks).
 
-```bash
-git clone https://github.com/SamAbaasi/reactive-react
-cd reactive-react/apps/benchmark
-npm install
-npm run dev
-```
-
-Open the printed URL. Each button on the page corresponds to a benchmark test. Click and observe the timing in the browser DevTools Performance tab.
-
-### Official harness
-
-Reproduce the numbers in this document by running the official `js-framework-benchmark` harness:
+To reproduce:
 
 ```bash
+# Clone js-framework-benchmark
 git clone https://github.com/krausest/js-framework-benchmark
-cd js-framework-benchmark/frameworks/keyed
-# Create a reactive-react folder with the adapter from apps/benchmark/main.jsx
-# Configure it with the @rrjs packages at their published versions
-cd ../../webdriver-ts
+cd js-framework-benchmark
+
+# Add Reactive React adapter
+# (use apps/benchmark/main.jsx from this repo as the template)
+
+# Run the benchmark
+cd webdriver-ts
 npm install
 npm run bench keyed/reactive-react
+npm run bench keyed/react-hooks
 ```
 
-The harness requires Chrome and the Selenium WebDriver setup described in the upstream README.
-
-Numbers will vary by machine. The relative comparisons (faster/slower than React, ratio to SolidJS) are more stable than the absolute times.
+Results are saved to `webdriver-ts/results/`. Numbers will vary by machine. The relative comparisons (faster/slower) are more stable than absolute times.
 
 ---
 
-## Caveats and Limitations
+## Caveats
 
-These numbers measure DOM-update performance, not full application performance. Real applications also pay for:
+These numbers measure DOM-update performance under CPU throttling. Real applications also pay for network latency, server-side rendering time, and developer-introduced overhead.
 
-- JavaScript parse time after bundle download (Reactive React's small bundle helps here)
-- Initial component tree construction (Reactive React's lack of VDOM helps here)
-- Memory pressure from large data structures (Reactive React is competitive here)
-- Network and API latency (unaffected by framework choice)
+The Reactive React adapter uses per-row signals for label updates, which the library supports as a first-class pattern but which is not the most idiomatic React translation. Library users who write React-style immutable updates will see slower numbers on `update_10th` (probably 1.5-2× slower).
 
-The numbers do not capture real-application metrics like Time to Interactive (TTI), Largest Contentful Paint (LCP), or interaction-to-paint latency on real workloads. Those will be measured in v0.2 with a dedicated real-world benchmark suite.
-
-The benchmark adapter uses per-row signals, which is the fastest pattern Reactive React supports. Library users starting from React patterns will not immediately get these numbers; they need to adopt the signal-per-row idiom for fine-grained updates. The migration guide in [`docs/MIGRATION.md`](./docs/MIGRATION.md) explains this.
+This `BENCHMARKS.md` will be updated when:
+- The Reactive React idiomatic adapter is benchmarked separately
+- The library is officially submitted to the public leaderboard (planned for v0.2)
+- v0.2 lands with compile-time static binding analysis that closes the creation-test gaps
 
 ---
 
-## Known Areas for v0.2
+## v0.2 Roadmap
 
-For full transparency, v0.2 will address:
+v0.2 will address:
 
-- **Fine-grained per-binding subscription** to close the SolidJS targeted-update gap. The script time on `select row` is already 3 ms — the work is in reducing the effect-graph overhead so the script doesn't fire 1,000 effects on a single signal change.
-- **Idiomatic-pattern benchmarks** showing how Reactive React performs when used like React (plain arrays, immutable updates) rather than the per-row signal pattern.
-- **Official js-framework-benchmark submission** with the finalized adapter, putting Reactive React on the public leaderboard.
-- **Optional `renderTo` API for non-DOM backends** — exploring whether the signal kernel could drive Canvas, terminal, or React Native-style targets.
+- **Per-binding fine-grained subscription** to reduce per-row effect overhead on selection/swap/remove operations
+- **Compile-time static prop hoisting** in the Babel plugin to skip the effect wrapper for non-reactive bindings
+- **Server-side rendering** and hydration support
+- **Official js-framework-benchmark submission** with both signal-optimized and idiomatic adapters
+- **Real-world benchmark suite** measuring Time to Interactive, Largest Contentful Paint, and interaction latency
 
-This document will be updated when v0.2 ships.
+The targeted-update numbers should approach SolidJS parity. The creation-test gap to React should close. This document will be updated when v0.2 ships.

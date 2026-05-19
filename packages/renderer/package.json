@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/renderer",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Signal-driven DOM renderer with keyed list reconciliation. No VDOM.",
   "type": "module",
   "main": "./dist/index.js",
