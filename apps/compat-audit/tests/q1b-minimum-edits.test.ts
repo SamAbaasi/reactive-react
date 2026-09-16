@@ -78,7 +78,9 @@ describe('Q1b — minimum edits', () => {
     const r = run(src, 'Bare')
     const items = r.container.querySelectorAll('li').length
     record('array literal as child', items === 2 ? 'works' : 'STRINGIFIED', `li count=${items} text="${text(r.container).slice(0, 60)}"`)
-    expect(items).toBeGreaterThanOrEqual(0)
+    expect(r.error).toBeNull()
+    expect(items).toBe(2)
+    expect(text(r.container)).toBe('AB')
   })
 
   afterAll(() => printMatrix('Q1b — minimum edits'))

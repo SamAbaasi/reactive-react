@@ -32,7 +32,7 @@ export default defineConfig({
         if (!id.endsWith('.tsx') && !id.endsWith('.jsx')) return null
         const result = await babel.transformAsync(code, {
           filename: id,
-          plugins: [reactiveReact],
+          plugins: [[reactiveReact, { runOnce: false }]],
           presets: ['@babel/preset-typescript'],
           parserOpts: { plugins: ['jsx', 'typescript'] },
           sourceMaps: true,

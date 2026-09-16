@@ -1,9 +1,16 @@
-// Q3 — exact coverage matrix for @rrjs/babel-plugin + renderer.
+// Q3 — exact coverage matrix for @rrjs/babel-plugin + renderer on the legacy
+// path (`runOnce: false`), which is now opt-out rather than the default.
 //
 // For each call site: is a getter auto-called, left as a raw function, or
 // silently mis-handled? And separately — is the binding REACTIVE, i.e. does it
 // update when the signal changes? Those are two different questions and the
 // interesting failures are the ones that render correctly and then never update.
+//
+// Every row asserts the behaviour it records, including the wrong ones. That is
+// deliberate: while this path is still supported it should not drift unnoticed,
+// and the rows that are wrong here are the reason the default moved. The same
+// call sites under the default options are asserted to be correct in
+// runonce-constructs.test.ts.
 import { describe, it, expect, afterAll } from 'vitest'
 import { compile, record, printMatrix } from './harness'
 import { h, list, mount } from '@rrjs/renderer'
@@ -71,7 +78,7 @@ describe('Q3 — plugin coverage matrix', () => {
     p.bump()
     const after = txt(p.container)
     record('JSX child {value}', classify(before, after), `before="${before.slice(0, 40)}" after="${after.slice(0, 40)}"`)
-    expect(before).toBeDefined()
+    expect(classify(before, after)).toBe('auto-called, reactive')
   })
 
   it('JSX attribute', () => {
@@ -81,7 +88,7 @@ describe('Q3 — plugin coverage matrix', () => {
     p.bump()
     const after = read()
     record('JSX attribute id={value}', classify(before, after), `before="${before.slice(0, 40)}" after="${after.slice(0, 40)}"`)
-    expect(before).toBeDefined()
+    expect(classify(before, after)).toBe('auto-called, reactive')
   })
 
   it('JSX template literal', () => {
@@ -91,7 +98,8 @@ describe('Q3 — plugin coverage matrix', () => {
     const after = txt(p.container)
     const norm = (s: string) => s.replace(/^n=/, '')
     record('JSX template literal', classify(norm(before), norm(after)), `before="${before.slice(0, 40)}" after="${after.slice(0, 40)}"`)
-    expect(before).toBeDefined()
+    // The getter is interpolated as a function, so its source text lands in the DOM.
+    expect(classify(norm(before), norm(after))).toBe('RAW FUNCTION')
   })
 
   it('JSX conditional expression', () => {
@@ -105,7 +113,9 @@ describe('Q3 — plugin coverage matrix', () => {
         : before === 'is-A' ? 'auto-called, NOT reactive' : 'mis-handled',
       `before="${before}" after="${after}"`
     )
-    expect(before).toBeDefined()
+    // Neither branch is re-evaluated: the wrong one is chosen and then kept.
+    expect(before).toBe('is-B')
+    expect(after).toBe('is-B')
   })
 
   it('nested object prop (style)', () => {
@@ -120,7 +130,8 @@ describe('Q3 — plugin coverage matrix', () => {
         : before === 'red' ? 'auto-called, NOT reactive' : `mis-handled`,
       `before="${before}" after="${after}"`
     )
-    expect(before).toBeDefined()
+    expect(before).toBe('blue')
+    expect(after).toBe('blue')
   })
 
   it('value passed as a prop to a child component', () => {
@@ -131,7 +142,7 @@ describe('Q3 — plugin coverage matrix', () => {
     p.bump()
     const after = txt(p.container)
     record('prop to child component', classify(before, after), `before="${before.slice(0, 40)}" after="${after.slice(0, 40)}"`)
-    expect(before).toBeDefined()
+    expect(classify(before, after)).toBe('auto-called, reactive')
   })
 
   it('event handler body reading the value', () => {
@@ -147,7 +158,8 @@ describe('Q3 — plugin coverage matrix', () => {
       isRaw ? 'RAW FUNCTION' : seen.endsWith('A') ? 'auto-called' : 'mis-handled',
       isRaw ? 'value used as a value yields the getter source' : `saw "${seen.slice(0, 40)}"`
     )
-    expect(seen).toBeDefined()
+    expect(isRaw).toBe(true)
+    expect(seen).toContain(GETTER_SOURCE_MARKER)
   })
 
   it('plain statement outside JSX', () => {
@@ -161,7 +173,8 @@ describe('Q3 — plugin coverage matrix', () => {
       isRaw ? 'RAW FUNCTION' : before === 'AA' ? 'auto-called' : 'mis-handled',
       isRaw ? 'concatenated the getter source instead of the value' : `rendered "${before.slice(0, 40)}"`
     )
-    expect(before).toBeDefined()
+    expect(isRaw).toBe(true)
+    expect(before).not.toBe('AA')
   })
 
   it('useEffect deps array', async () => {
@@ -178,7 +191,8 @@ describe('Q3 — plugin coverage matrix', () => {
       runsAfter > runsBefore ? 'reactive (re-runs)' : 'NOT reactive (never re-runs)',
       `effect runs: ${runsBefore} -> ${runsAfter}; deps hold the getter, whose identity never changes`
     )
-    expect(runsAfter).toBeGreaterThanOrEqual(0)
+    expect(runsBefore).toBe(1)
+    expect(runsAfter).toBe(runsBefore)
   })
 
   it('useEffect deps array with value() called', async () => {
@@ -195,7 +209,8 @@ describe('Q3 — plugin coverage matrix', () => {
       runsAfter > runsBefore ? 'reactive (re-runs)' : 'NOT reactive (never re-runs)',
       `effect runs: ${runsBefore} -> ${runsAfter} (components run once, so deps are only ever evaluated once)`
     )
-    expect(runsAfter).toBeGreaterThanOrEqual(0)
+    expect(runsBefore).toBe(1)
+    expect(runsAfter).toBe(runsBefore)
   })
 
   it('useMemo deps array', () => {
@@ -210,7 +225,8 @@ describe('Q3 — plugin coverage matrix', () => {
       before === 'A!' && after === 'B!' ? 'reactive' : before === 'A!' ? 'NOT reactive' : 'mis-handled',
       `before="${before.slice(0, 30)}" after="${after.slice(0, 30)}"`
     )
-    expect(before).toBeDefined()
+    expect(before).toBe('A!')
+    expect(after).toBe('B!')
   })
 
   it('inline .map() in JSX (the rewrite path)', () => {
@@ -219,7 +235,7 @@ describe('Q3 — plugin coverage matrix', () => {
       return <ul>{rows.map(r => <li key={r.id}>{r.n}</li>)}</ul>;`)
     const n = p.container.querySelectorAll('li').length
     record('inline .map() with key', n === 2 ? 'rewritten to list()' : 'mis-handled', `li count=${n}`)
-    expect(n).toBeGreaterThanOrEqual(0)
+    expect(n).toBe(2)
   })
 
   it('.map() via a variable', () => {
@@ -229,7 +245,8 @@ describe('Q3 — plugin coverage matrix', () => {
       return <ul>{items}</ul>;`)
     const n = p.container.querySelectorAll('li').length
     record('.map() via a variable', n === 2 ? 'rewritten to list()' : 'STRINGIFIED', `li count=${n}, text="${txt(p.container).slice(0, 40)}"`)
-    expect(n).toBeGreaterThanOrEqual(0)
+    expect(n).toBe(2)
+    expect(txt(p.container)).toBe('xy')
   })
 
   it('.map() without a key', () => {
@@ -238,7 +255,8 @@ describe('Q3 — plugin coverage matrix', () => {
       return <ul>{rows.map(r => <li>{r}</li>)}</ul>;`)
     const n = p.container.querySelectorAll('li').length
     record('.map() without key', n === 2 ? 'renders (not list())' : 'STRINGIFIED', `li count=${n}, text="${txt(p.container).slice(0, 40)}"`)
-    expect(n).toBeGreaterThanOrEqual(0)
+    expect(n).toBe(2)
+    expect(txt(p.container)).toBe('xy')
   })
 
   it('JSX spread attributes', () => {
@@ -248,7 +266,8 @@ describe('Q3 — plugin coverage matrix', () => {
     const el = p.container.querySelector('div')
     const id = el?.getAttribute('id') ?? '(none)'
     record('JSX spread {...props}', id === 'spread-id' ? 'supported' : 'NOT SUPPORTED', `id="${id}" title="${el?.getAttribute('title') ?? '(none)'}"`)
-    expect(id).toBeDefined()
+    expect(id).toBe('spread-id')
+    expect(el?.getAttribute('title')).toBe('T')
   })
 
   afterAll(() => printMatrix('Q3 — plugin/renderer coverage matrix'))

@@ -227,5 +227,10 @@ it('keeps unsupported effect forms outside the changing-dependency slice', () =>
     plugins: [[plugin, { runOnce: true, injectImports: false }]], configFile: false, babelrc: false,
   })
   expect(() => compileCase(`useEffect(effectCallback, [])`)).toThrow(/requires an inline callback/)
-  expect(() => compileCase(`useEffect(() => {})`)).toThrow(/literal dependency array/)
+  // A dependency array that is not a literal cannot be read at compile time.
+  expect(() => compileCase(`const deps=[count]; useEffect(() => {}, deps)`)).toThrow(/literal dependency array/)
+  expect(() => compileCase(`useEffect(() => {}, [], 1)`)).toThrow(/callback and an optional dependency array/)
+  // Omitting the array entirely is supported: the list is inferred from what
+  // the callback reads, which for an empty callback is nothing.
+  expect(() => compileCase(`useEffect(() => {})`)).not.toThrow()
 })

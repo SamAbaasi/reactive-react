@@ -15,7 +15,7 @@ export default defineConfig({
 
         const result = await babel.transformAsync(code, {
           filename: id,
-          plugins: [reactiveReactPlugin],
+          plugins: [[reactiveReactPlugin, { runOnce: false }]],
           presets: ['@babel/preset-typescript'],
           parserOpts: { plugins: ['jsx', 'typescript'] },
           sourceMaps: true,

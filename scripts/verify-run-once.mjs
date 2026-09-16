@@ -88,7 +88,7 @@ try {
   assert.deepEqual(traces[1], ['0:0:small', '1:2:small', '2:4:large', '3:6:large'])
   for (const source of [
     `function App(){const [xs]=useState([]);return <ul>{xs.map(x=><li key={x}>{x}</li>)}</ul>}`,
-    `function App(){const [n]=useState(0);useEffect(()=>{});return <p>{n}</p>}`,
+    `function App(){const [n]=useState(0);const d=[n];useEffect(()=>{},d);return <p>{n}</p>}`,
     `function App(){const [n]=useState(0);if(n){performWork();return <p>yes</p>;}return <p>no</p>}`,
   ]) assert.throws(() => compile(source), /runOnce:/)
   const [read, write] = createSignal(0)

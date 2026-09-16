@@ -33,7 +33,7 @@ export default defineConfig({
         if (!/\.(tsx|jsx)$/.test(id.split('?')[0])) return null
         const result = await babel.transformAsync(code, {
           filename: id,
-          plugins: [reactiveReact],
+          plugins: [[reactiveReact, { runOnce: false }]],
           presets: ['@babel/preset-typescript'],
           parserOpts: { plugins: ['jsx', 'typescript'] },
           configFile: false,

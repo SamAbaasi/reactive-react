@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { transformSync } from '@babel/core'
 import plugin from '../src/index'
 
+// These cases cover the older reactive-wrapping path, which is now opt-out
+// rather than the default, so each transform selects it explicitly.
 function transform(code: string, options: Record<string, unknown> = {}): string {
   const result = transformSync(code, {
-    plugins: [[plugin, options]],
+    plugins: [[plugin, { runOnce: false, ...options }]],
     parserOpts: { plugins: ['jsx'] },
     generatorOpts: { compact: true, retainLines: false },
   })
@@ -259,4 +261,41 @@ describe('full counter component', () => {
     expect(out).not.toContain('list(')
   })
 })
+})
+
+// The plugin's default path. These assert the default itself, not a path a
+// caller selected, so a silent flip of PluginOptions.runOnce fails here.
+describe('default options compile the runOnce path', () => {
+  const withDefaults = (code: string) => transformSync(code, {
+    plugins: [plugin],
+    parserOpts: { plugins: ['jsx'] },
+    configFile: false,
+    babelrc: false,
+  })!.code!
+  const legacy = (code: string) => transformSync(code, {
+    plugins: [[plugin, { runOnce: false }]],
+    parserOpts: { plugins: ['jsx'] },
+    configFile: false,
+    babelrc: false,
+  })!.code!
+
+  const source = `function Case(){ const [xs,setXs]=useState([{id:'a'}]); return <section><button onClick={()=>setXs([...xs,{id:'b'}])}>add</button><ul>{xs.map(x=><li key={x.id}>{x.id}</li>)}</ul></section>; }`
+
+  it('compiles a keyed list into direct operations by default', () => {
+    const out = withDefaults(source)
+    expect(out).toContain('operationList')
+    expect(out).toContain('listAppend')
+  })
+
+  it('still compiles the reconciling list() path when runOnce is false', () => {
+    const out = legacy(source)
+    expect(out).toContain('list(')
+    expect(out).not.toContain('operationList')
+  })
+
+  it('applies runOnce rejections by default', () => {
+    // A runOnce-only diagnostic: reaching it proves the default took that path.
+    expect(() => withDefaults(`const x = createPortal(<div />, target, 'key')`))
+      .toThrow(/createPortal keys are unsupported/)
+  })
 })

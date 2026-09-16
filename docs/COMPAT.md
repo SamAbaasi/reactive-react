@@ -1,39 +1,72 @@
 # Compatibility
 
-Reactive React currently provides a signal runtime, a DOM renderer, React-shaped hooks, and a JSX compiler. It is not yet a drop-in replacement for React.
+Reactive React provides a signal runtime, a DOM renderer, React-shaped hooks and
+a JSX compiler. It is not a drop-in replacement for React. It compiles a checked
+subset of ordinary React source and refuses the rest with an explicit build-time
+diagnostic rather than mis-compiling it.
 
-Components execute once per mount. State and memo hooks return getters. The compiler wraps dynamic JSX expressions in functions; it does not convert ordinary React state reads throughout a component into reactive computations.
+There are two compiler paths and they do not share semantics.
 
-## Regression coverage
+| | default (`runOnce`) | `runOnce: false` |
+| --- | --- | --- |
+| State | a value, as in React: `count` | a getter: `count()` |
+| Component body | runs once per mount | runs once per mount |
+| Keyed lists | direct insert/move/remove operations | the reconciling `list()` renderer |
+| Unsupported source | rejected at build time | compiled, sometimes incorrectly |
 
-- Getter children, getter calls, and helper calls reading signals update their DOM bindings.
-- Conditional bindings remove and reinsert nodes in the correct position. Reactive child arrays support nested arrays, text, and nodes.
-- Keyed object rows preserve identity and update reactive property reads, including content changes during append.
-- Renderer-created bindings are disposed when their owning nodes are unmounted.
-- Layout effects run after insertion. Shared roots and fragment returns retain lifecycle ownership; queued passive effects are cancelled on unmount.
-- Input value and checked bindings update live properties. onDoubleClick uses the native dblclick event.
+Pick one per build. The sections below describe the default.
 
-These are targeted guarantees, not complete React lifecycle or DOM compatibility. See [DEFECTS.md](./DEFECTS.md) for test locations and remaining work.
+## What the default path accepts
 
-## Compatibility gaps
+The supported surface, with its exact limits, is in [RUN-ONCE.md](./RUN-ONCE.md).
+In summary it covers state as ordinary values, derived expressions, branches and
+ternaries, template literals, style objects, event handlers with React's snapshot
+semantics, props (destructured or read from a `props` parameter), children,
+context providers and consumers, refs, effects, keyed lists driven by known
+operations, fixed arrays, and native SVG.
 
-| Construct | Current limitation |
-| --- | --- |
-| Ordinary state values | Arithmetic, array methods, and comparisons operate on a getter rather than a value. |
-| Derived locals and early returns | Evaluated once; adding getter calls alone does not make component control flow reactive. |
-| Effect dependencies | Arrays are evaluated once. Neither [value] nor [value()] makes them update. |
-| Context | Eager child construction can run consumers before their provider is active. |
-| Event closures | Live getter reads do not establish React render-snapshot semantics. |
-| Lists | Primitive replacement, reactive indices, and arbitrary map callbacks need further support. |
-| Types | Getter-returning hooks differ from React value-returning signatures. |
-| Ownership | Renderer bindings have disposal; general computed/effect ownership is incomplete. |
+`apps/compat-audit/tests/q1-unmodified-react.test.ts` compiles six components
+written in the style of React's own documentation, with the plugin's defaults and
+no adaptation, and asserts that each renders and updates correctly.
 
-useTransition runs synchronously with no pending state. useDeferredValue returns its input. useInsertionEffect uses layout-effect behavior. These do not implement React scheduling. SSR, hydration, class components, Suspense, and arbitrary third-party React library compatibility are not established.
+## What the default path refuses
 
-## Verification
+Refusals are deliberate. Each one is a case where the compiler cannot establish
+the behaviour React would produce, so it stops instead of guessing:
 
-Run node scripts/build-all.mjs and node scripts/test-all.mjs from the root. Run npm test --prefix apps/compat-audit for compiler/runtime probes and npm run oracle --prefix apps/oracle for differential DOM sequences against React.
+- lists whose contents cannot be traced to known operations, including arrays
+  supplied by external code and fixed arrays whose contents read reactive values;
+- `useEffect` with a dependency argument that is not a literal array, or a
+  callback that is not written inline;
+- context provider values other than scalars, owned bindings, and object or array
+  literals built from those;
+- component props that escape through spread or computed access;
+- imports outside the exact-path module contract manifest;
+- `count()` where `count` holds a non-callable state value — the older spelling,
+  reported at build time rather than as a `TypeError` on the first interaction.
 
-Some older audit tests report observations without asserting correct behavior. Passing those tests is not evidence of compatibility. The oracle uses separate React and signal implementations and normalizes empty text anchors; it does not prove identical-source compatibility or equality of every observable DOM property.
+## Known differences from React
 
-The next milestone is the unchanged apps/flip application passing the same interactions on both targets. Its signal target does not yet meet that milestone. Build success alone is insufficient.
+- `useEffect(fn)` with no dependency array re-runs when a value the callback reads
+  changes, not after every render. A callback that reads nothing reactive runs
+  once. Measured against React 19.2 and asserted in
+  `apps/compat-audit/tests/effect-inferred-deps.test.ts`.
+- `useTransition` runs synchronously with no pending state, `useDeferredValue`
+  returns its input, and `useInsertionEffect` behaves as a layout effect. These do
+  not implement React scheduling.
+- SSR, hydration, class components, Suspense, concurrent APIs, Strict Mode
+  semantics and arbitrary third-party React libraries are not established.
+
+## Evidence
+
+Run `node scripts/build-all.mjs` then `node scripts/test-all.mjs` from the root,
+and `npm test --prefix apps/compat-audit` for the compiler and runtime suites.
+`npm run verify:phase5`, `verify:phase6` and `verify:phase7` run the full
+acceptance gates, including independent React and target builds compared in a
+real browser, architecture traces and negative controls.
+
+Every test in both suites asserts a result. Tests that merely recorded
+observations have been replaced; a passing suite is evidence for the cases it
+covers and for nothing beyond them. A finite corpus cannot establish universal
+React compatibility, and no performance claim is supported until Phase 8 produces
+measurements on the current compiler path.

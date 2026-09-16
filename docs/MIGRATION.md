@@ -1,9 +1,16 @@
 # Migrating From React
 
-This document walks through using Reactive React in place of React. The library is API-compatible enough that most existing components translate with two rules:
+This document walks through using Reactive React in place of React.
 
-1. Reactive state is read through getters: `count()` not `count`
-2. Imports change from `react` / `react-dom` to `@rrjs/react-compat` and `@rrjs/renderer`
+On the default compiler path the component source does not change at all. Only
+the imports move, from `react` / `react-dom` to `@rrjs/react-compat` and
+`@rrjs/renderer`. State stays an ordinary value. Source the compiler cannot
+handle is reported as a build error rather than compiled into something that
+behaves differently.
+
+Passing `runOnce: false` selects the older path, where state is a getter read as
+`count()`. That path is documented separately below, and the two are not
+interchangeable — pick one per build.
 
 ---
 
@@ -99,6 +106,55 @@ The compiler injects runtime imports by default; global runtime assignments are 
 
 ## Translating Components
 
+On the default path, translating a component means changing the import line.
+
+```tsx
+import { useState, useEffect } from '@rrjs/react-compat'
+
+function Counter() {
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    document.title = `Count: ${count}`
+  }, [count])
+
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      Clicked {count} times
+    </button>
+  )
+}
+```
+
+That is the React source unchanged. It renders `Clicked 0 times`, updates to
+`Clicked 1 times` on click, and the effect re-runs with the new value, which
+`apps/compat-audit/tests/q1-unmodified-react.test.ts` asserts for this and five
+other components from React's own documentation.
+
+Mount it with the renderer instead of `react-dom`:
+
+```tsx
+import { mount } from '@rrjs/renderer'
+mount(Counter, document.getElementById('app')!)
+```
+
+If the compiler cannot handle something, the build fails with a message naming
+the construct. See [COMPAT.md](./COMPAT.md) for what is accepted and refused.
+
+---
+
+## The `runOnce: false` path
+
+Everything from here to the end of this document describes the older path,
+selected with `runOnce: false`. On it, state is a getter and component source has
+to be adapted. None of it applies to the default.
+
+To select it, pass the option where the Setup section above passes the plugin:
+
+```js
+plugins: [[reactiveReact, { runOnce: false }]],
+```
+
 ### Before (React)
 
 ```tsx
@@ -119,7 +175,7 @@ function Counter() {
 }
 ```
 
-### After (Reactive React)
+### After (`runOnce: false`)
 
 ```tsx
 import { useState, useEffect } from '@rrjs/react-compat'
@@ -155,8 +211,8 @@ mount(Counter, document.getElementById('app')!)
 
 ## Common Translation Patterns
 
-| Pattern | React | Reactive React |
-|---------|-------|----------------|
+| Pattern | React | `runOnce: false` |
+|---------|-------|------------------|
 | Read state | `count` | `count()` |
 | Read in JSX | `{count}` | `{count}` (unchanged) |
 | Increment | `setCount(count + 1)` | `setCount(count() + 1)` |
@@ -251,7 +307,7 @@ The store contract is identical to React's. Any library that implements its Reac
 
 ---
 
-## What's Not Supported in v0.1
+## What's Not Supported
 
 - Server-side rendering and hydration
 - React DevTools
@@ -266,7 +322,7 @@ See [`COMPAT.md`](./COMPAT.md) for the full compatibility contract.
 ## Troubleshooting
 
 **My component renders but doesn't update.**
-You probably wrote `count` somewhere outside JSX where you needed `count()`. Look at where the value is consumed and add the parentheses.
+On `runOnce: false`, you probably wrote `count` somewhere outside JSX where you needed `count()`. Look at where the value is consumed and add the parentheses. On the default path the opposite applies: `count` is the value, and writing `count()` for a non-callable state is reported as a build error naming the binding.
 
 **Imports throw "Hook called outside of a component".**
 You called a hook from a regular function (one that wasn't mounted via `mount()`). All hooks must run inside the body of a component function that the renderer mounts.

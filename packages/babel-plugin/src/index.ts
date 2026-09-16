@@ -87,7 +87,11 @@ export type {
 // that already bind `h`/`list` as parameters.
 
 export type PluginOptions = {
-  /** Compile the checked React-source subset without component re-execution or list reconciliation. */
+  /**
+   * Compile the checked React-source subset without component re-execution or
+   * list reconciliation. Default: true. Set false for the older path, which
+   * wraps reactive reads instead and does not run component bodies once.
+   */
   runOnce?: boolean
   /** Module to import `h` and `list` from. Default: `@rrjs/renderer`. */
   importSource?: string
@@ -147,7 +151,7 @@ export default function reactiveReactPlugin(): PluginObj<PluginPass> {
       Program(path, state) {
         const opts = state.opts as PluginOptions
         annotateIntrinsicNamespaces(path)
-        if (!opts?.runOnce) return
+        if (opts?.runOnce === false) return
         rewriteRunOnceReactDomImports(path, opts.importSource ?? '@rrjs/renderer')
         let helper: t.Identifier | undefined
         let selector: t.Identifier | undefined

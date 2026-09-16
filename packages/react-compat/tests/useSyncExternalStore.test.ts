@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createInstance, withInstance } from '../src/instance'
 import { useSyncExternalStore } from '../src/hooks/useSyncExternalStore'
+import { effect } from '@rrjs/signals'
 
 // A minimal store implementation for testing.
 // Same shape as Zustand, Redux, or any other external store.
@@ -114,13 +115,27 @@ describe('useSyncExternalStore', () => {
       useSyncExternalStore(store.subscribe, store.getSnapshot)
     })
 
-    // Reset to an Object.is-equal value (literally same reference)
+    // Observe the value the hook exposes, so a redundant write would show up as
+    // an extra effect run rather than having to be taken on trust.
+    let snapshot: () => unknown = () => undefined
+    withInstance(instance, () => {
+      snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot) as () => unknown
+    })
+    let runs = 0
+    const stop = effect(() => { snapshot(); runs++ })
+    const runsAfterSetup = runs
+
+    // Publish an Object.is-equal value (literally the same reference).
     const snapshotBefore = store.getSnapshot()
     store.setValue(snapshotBefore)
+    expect(runs).toBe(runsAfterSetup)
 
-    // No assertion needed — the signal's bailout means no exception, no infinite loop.
-    // This documents the property.
-    expect(true).toBe(true)
+    // A genuinely different value still propagates, so the bailout above is the
+    // signal comparing values rather than the subscription being inert.
+    store.setValue({ count: 2 })
+    expect(runs).toBe(runsAfterSetup + 1)
+    expect(snapshot()).toEqual({ count: 2 })
+    stop()
   })
 
   it('accepts getServerSnapshot but ignores it client-side', () => {

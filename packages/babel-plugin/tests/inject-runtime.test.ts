@@ -4,7 +4,7 @@ import plugin from '../src/index'
 
 function transform(code: string, opts?: Record<string, unknown>): string {
   const result = transformSync(code, {
-    plugins: opts ? [[plugin, opts]] : [plugin],
+    plugins: [[plugin, { runOnce: false, ...opts }]],
     parserOpts: { plugins: ['jsx'] },
     generatorOpts: { compact: true, retainLines: false },
     filename: 'file.jsx',

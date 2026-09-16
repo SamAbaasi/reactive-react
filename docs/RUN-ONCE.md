@@ -3,8 +3,9 @@
 The complete requirements, remaining phases and mandatory evidence rules are in
 [ROADMAP.md](./ROADMAP.md). This document describes the currently implemented subset.
 
-The experimental `runOnce: true` Babel option compiles a checked subset of
-ordinary React component source into the existing signal runtime. Component
+`runOnce` is the plugin's default. It compiles a checked subset of ordinary
+React component source into the existing signal runtime; `runOnce: false`
+selects the older reactive-wrapping path instead. Component
 bodies execute once per mount. The generated path updates DOM bindings directly
 and does not invoke the keyed-list reconciler or a React runtime fallback.
 
@@ -22,10 +23,23 @@ contains a keyed-list reconciler; the new compiler path excludes it.
 - A top-level JSX ternary containing native elements tracks its selected branch
   separately. The live branch retains its DOM while the predicate remains true.
 - Component unmount disposes compiler-created computations.
-- Direct inline `useEffect` callbacks with a literal `[]` dependency array run
-  as owned passive commit work. Reactive values captured by setup and cleanup
+- Direct inline `useEffect` callbacks run as owned passive commit work. With a
+  literal `[]` dependency array, reactive values captured by setup and cleanup
   are snapshotted during the initial component execution. Unmount runs cleanup,
   and unmount before the passive flush cancels setup.
+- `useEffect(fn)` with no dependency argument is given the dependency list its
+  callback implies: every reactive binding the callback reads, compiled as live
+  reads. Each re-run flushes the previous cleanup first and takes a fresh
+  snapshot, so state and derived values the effect reads stay current.
+
+  **This is narrower than React and the difference is observable.** React re-runs
+  a dependency-less effect after *every* render, including renders caused by
+  state the effect never touches. Here a component body runs once, so there is no
+  second render to key off; an effect that reads nothing reactive therefore runs
+  exactly once. Measured against React 19.2 with identical behaviour under test:
+  an effect appending to a string on every run reaches `"xx"` under React after
+  one click and `"x"` here. `apps/compat-audit/tests/effect-inferred-deps.test.ts`
+  asserts both sides of that comparison.
 - Direct local function components support reactive/destructured props, static
   defaults, inline callbacks, one lazy child and primitive render-prop results.
   Direct local context providers/consumers, conditional context snapshots,

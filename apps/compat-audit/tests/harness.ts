@@ -7,7 +7,8 @@
 // the compiled output evaluable with `new Function`.
 import * as babel from '@babel/core'
 import reactiveReact from '@rrjs/babel-plugin'
-import { h, list, mount } from '@rrjs/renderer'
+import * as renderer from '@rrjs/renderer'
+import { h, list, mount, choose } from '@rrjs/renderer'
 import * as compat from '@rrjs/react-compat'
 
 export interface RunResult {
@@ -24,7 +25,7 @@ export function compile(source: string): string {
         // Classic runtime: this harness evals compiled output with
         // `new Function('h', 'list', ...)`, so an injected `import` would be
         // a SyntaxError. Real apps use the default (automatic) injection.
-        plugins: [[reactiveReact, { injectImports: false }]],
+        plugins: [[reactiveReact, { injectImports: false, runOnce: false }]],
     presets: ['@babel/preset-typescript'],
     parserOpts: { plugins: ['jsx', 'typescript'] },
     configFile: false,
@@ -36,7 +37,9 @@ export function compile(source: string): string {
 }
 
 const INJECTED = [
-  'h', 'list',
+  'h', 'list', 'choose', 'derive',
+  'operationList', 'listAppend', 'listPrepend', 'listClear', 'listTruncate',
+  'listSplice', 'listReverse', 'listFilter', 'listSort', 'listMap', 'listMove',
   'useState', 'useEffect', 'useLayoutEffect', 'useMemo', 'useRef',
   'useReducer', 'useCallback', 'useContext', 'createContext', 'forwardRef',
   'memo', 'useId', 'useSyncExternalStore', 'useTransition', 'useDeferredValue',
@@ -44,8 +47,12 @@ const INJECTED = [
 
 function runtimeValues(): unknown[] {
   const anyCompat = compat as Record<string, unknown>
+  const anyRenderer = renderer as unknown as Record<string, unknown>
+  const listHelpers = ['operationList', 'listAppend', 'listPrepend', 'listClear',
+    'listTruncate', 'listSplice', 'listReverse', 'listFilter', 'listSort',
+    'listMap', 'listMove'].map(name => anyRenderer[name])
   return [
-    h, list,
+    h, list, choose, anyCompat.derive, ...listHelpers,
     anyCompat.useState, anyCompat.useEffect, anyCompat.useLayoutEffect,
     anyCompat.useMemo, anyCompat.useRef, anyCompat.useReducer,
     anyCompat.useCallback, anyCompat.useContext, anyCompat.createContext,
@@ -55,14 +62,31 @@ function runtimeValues(): unknown[] {
   ]
 }
 
+// `compile` above pins the older path. This one passes no `runOnce` key at
+// all, so it exercises whatever the plugin defaults to -- the path a consumer
+// gets without configuring anything.
+export function compileDefault(source: string): string {
+  const out = babel.transformSync(source, {
+    filename: 'case.tsx',
+    plugins: [[reactiveReact, { injectImports: false }]],
+    presets: ['@babel/preset-typescript'],
+    parserOpts: { plugins: ['jsx', 'typescript'] },
+    configFile: false,
+    babelrc: false,
+    sourceType: 'script',
+  })
+  if (!out?.code) throw new Error('babel produced no output')
+  return out.code
+}
+
 /** Compile `source`, pull out `componentName`, mount it, and report what happened. */
-export function run(source: string, componentName: string): RunResult {
+export function run(source: string, componentName: string, compiler: (s: string) => string = compile): RunResult {
   const container = document.createElement('div')
   document.body.appendChild(container)
 
   let code = ''
   try {
-    code = compile(source)
+    code = compiler(source)
     const factory = new Function(...INJECTED, `${code}\nreturn ${componentName};`)
     const Component = factory(...runtimeValues())
     mount(Component as never, container)

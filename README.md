@@ -1,12 +1,19 @@
 # Reactive React
 
-An experimental signal-based UI library with JSX and React-shaped hooks. Components run once per mount; reactive bindings update the DOM directly. Keyed lists use reconciliation.
+An experimental signal-based UI library with JSX and React-shaped hooks. Components run once per mount; reactive bindings update the DOM directly. Keyed lists compile to direct insert/move/remove operations instead of reconciliation.
 
-Ordinary unmodified React components are not yet supported generally. State values, effect dependencies, context, and derived control flow still differ. See [Compatibility](./docs/COMPAT.md).
+The compiler accepts a checked subset of ordinary React source and rejects the rest with an explicit diagnostic. It is not a general React implementation: arbitrary components, libraries and features outside that subset are unsupported. See [Compatibility](./docs/COMPAT.md) and [the supported scope and evidence](./docs/RUN-ONCE.md).
 
-## Run-once compiler experiment
+## Two compiler paths
 
-The opt-in `runOnce: true` compiler supports a checked subset of ordinary React source with one component execution per mount and no keyed reconciler calls. See [the supported scope, evidence, and runnable demo](./docs/RUN-ONCE.md). It does not yet support the full issue application.
+`runOnce` is the default. Each component body executes once per mount, state
+reads compile to reactive bindings, and list updates become direct operations,
+with no keyed reconciler calls. Source outside the supported subset is rejected
+at build time rather than mis-compiled.
+
+Passing `runOnce: false` selects the older path, which wraps reactive reads and
+uses the reconciling `list()` renderer. State there is a getter, so it is read
+as `count()`. The two paths do not share those semantics; pick one per build.
 
 ## Quick Look
 
@@ -18,7 +25,7 @@ function Counter() {
   const [count, setCount] = useState(0)
 
   return (
-    <button onClick={() => setCount(count() + 1)}>
+    <button onClick={() => setCount(count + 1)}>
       Clicked {count} times
     </button>
   )
@@ -27,9 +34,11 @@ function Counter() {
 mount(Counter, document.getElementById('app')!)
 ```
 
-Two differences from React:
-1. `count` is a getter: write `count()` outside JSX, but `{count}` inside JSX still works thanks to the Babel plugin
-2. The component function runs once when mounted, not on every state change — the signal updates the DOM directly
+The component source is ordinary React. One difference in behaviour:
+
+1. The component function runs once when mounted, not on every state change — the signal updates the DOM directly.
+
+On the `runOnce: false` path `count` is a getter instead, read as `count()`. The default path reports that spelling as a build error rather than letting it fail on the first click.
 
 Other React APIs have important semantic differences; see the compatibility document before migrating an application.
 

@@ -111,7 +111,7 @@ it('updates unchanged state arithmetic and derived locals while executing the co
 
 it('rejects unproven lists and effect forms instead of silently using a different architecture', () => {
   expect(() => compile(`function App(){ const [items] = useState([]); return <ul>{items.map(item => <li key={item.id}>{item.name}</li>)}</ul> }`)).toThrow(/runOnce:/)
-  expect(() => compile(`function App(){ const [count] = useState(0); useEffect(() => {}); return <p>{count}</p> }`)).toThrow(/runOnce:/)
+  expect(() => compile(`function App(){ const [count] = useState(0); const deps=[count]; useEffect(() => {}, deps); return <p>{count}</p> }`)).toThrow(/runOnce:/)
   expect(() => compile(`function App(){ const [count] = useState(0); if(count) { performWork(); return <p>yes</p>; } return <p>no</p> }`)).toThrow(/runOnce:/)
   expect(() => compile(`function App(){ const [count] = React.useState(0); return <p>{count}</p> }`)).toThrow(/namespace/)
   expect(() => compile(`function App(){ const [count] = useState(0); const handler=()=>alert(count); expose(handler); return <p>{count}</p> }`)).toThrow(/escaping/)

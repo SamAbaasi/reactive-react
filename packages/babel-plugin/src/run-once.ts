@@ -335,6 +335,24 @@ export function compileRunOnce(
       const binding = path.scope.getBinding(path.node.id.elements[0].name)!
       if (!binding.constant) throw path.buildCodeFrameError('runOnce: state bindings cannot be reassigned')
       reactive.set(binding, fn)
+      // `count()` is the older spelling, where state was a getter. Under these
+      // semantics `count` is the value, so calling it is a call on whatever the
+      // state holds -- for `useState(0)` that is a TypeError at the first click
+      // rather than at build time. When the initial value is plainly not
+      // callable, say so now instead of shipping that crash.
+      const initial = init.node.arguments[0]
+      const plainlyNotCallable = t.isNumericLiteral(initial) || t.isStringLiteral(initial)
+        || t.isBooleanLiteral(initial) || t.isNullLiteral(initial)
+        || t.isArrayExpression(initial) || t.isObjectExpression(initial)
+        || t.isTemplateLiteral(initial)
+      if (plainlyNotCallable) {
+        for (const reference of binding.referencePaths) {
+          const parent = reference.parentPath
+          if (parent?.isCallExpression() && parent.node.callee === reference.node) {
+            throw parent.buildCodeFrameError(`runOnce: state is a value here, so \`${binding.identifier.name}()\` calls it; read \`${binding.identifier.name}\` instead`)
+          }
+        }
+      }
       const setter = path.node.id.elements[1]
       if (t.isIdentifier(setter)) {
         const setterBinding = path.scope.getBinding(setter.name)
@@ -599,14 +617,26 @@ export function compileRunOnce(
   // lists. Reactive captures are snapshotted below at component execution, so
   // both effect setup and its cleanup observe the initial render values.
   const changingEffects = new Set<t.CallExpression>()
+  const inferredEffects = new Set<t.CallExpression>()
   program.traverse({
     CallExpression(path) {
       if (hookName(path) !== 'useEffect') return
       const [callback, deps] = path.get('arguments')
+      if (path.node.arguments.length > 2) {
+        throw path.buildCodeFrameError('runOnce: useEffect takes a callback and an optional dependency array')
+      }
       if (!callback || !(callback.isFunctionExpression() || callback.isArrowFunctionExpression())) {
         throw path.buildCodeFrameError('runOnce: useEffect requires an inline callback in the supported empty-dependency scope')
       }
-      if (!deps?.isArrayExpression()) {
+      // No dependency argument is React's "after every render". There is no
+      // second render here, so the closest honest reading is to re-run when
+      // something the callback actually reads changes. The dependency list for
+      // that is synthesised below, once every reactive binding is known.
+      if (!deps) {
+        inferredEffects.add(path.node)
+        return
+      }
+      if (!deps.isArrayExpression()) {
         throw path.buildCodeFrameError('runOnce: useEffect requires a literal dependency array')
       }
       if (deps.node.elements.length > 0) changingEffects.add(path.node)
@@ -818,7 +848,7 @@ export function compileRunOnce(
         }
       }
       const parameterBinding = callback.scope.getBinding(parameter.node.name)
-      callback.traverse({
+        callback.traverse({
         MemberExpression(member) {
           const object = member.get('object')
           const property = member.get('property')
@@ -861,6 +891,42 @@ export function compileRunOnce(
     const state = identity.stateScope.getBinding(identity.state)
     if (setter && state) stateSetters.set(setter, state)
   }
+
+  // Give every `useEffect(fn)` the dependency list its callback implies: each
+  // reactive binding the callback reads, in first-read order. The existing
+  // changing-dependency machinery then does the rest -- the list is read live,
+  // and the callback sees a fresh snapshot per run.
+  //
+  // This is deliberately narrower than React, which re-runs such an effect on
+  // every render including ones it has no stake in. Reading nothing reactive
+  // therefore yields `[]` and the effect runs once, which is the only thing
+  // that can be true when the body never runs a second time.
+  program.traverse({
+    CallExpression(path) {
+      if (!inferredEffects.has(path.node)) return
+      const effectCall = path.node
+      const callback = path.get('arguments')[0] as NodePath<t.Function>
+      const component = path.getFunctionParent()
+      const dependencies: t.Expression[] = []
+      const seen = new Set<Binding>()
+      callback.traverse({
+        ReferencedIdentifier(reference) {
+          if (generated.has(reference.node)) return
+          const binding = reference.scope.getBinding(reference.node.name)
+          if (!binding || seen.has(binding)) return
+          if (!component || reactive.get(binding) !== component) return
+          seen.add(binding)
+          // Emit the live read directly. The reference-rewriting pass has
+          // already collected its work from an earlier scope crawl, so a bare
+          // identifier added here would stay the getter itself -- an identity
+          // that never changes, and an effect that never re-runs.
+          dependencies.push(t.callExpression(t.identifier(binding.identifier.name), []))
+        },
+      })
+      path.node.arguments.push(t.arrayExpression(dependencies))
+      if (dependencies.length > 0) changingEffects.add(effectCall)
+    },
+  })
 
   const snapshots = new Map<NodePath<t.Function>, Map<Binding, t.Identifier>>()
   const snapshotFor = (origin: NodePath, binding: Binding): t.Identifier => {
@@ -1645,18 +1711,32 @@ export function compileRunOnce(
       if (t.isMemberExpression(path.node.callee) && t.isIdentifier(path.node.callee.property, { name: 'map' })) {
         const object = path.get('callee.object')
         const binding = object.isIdentifier() ? object.scope.getBinding(object.node.name) : undefined
-        const fixedModuleArray = Boolean(binding?.constant
-          && binding.path.isVariableDeclarator() && t.isArrayExpression(binding.path.node.init)
-          && binding.scope.path.isProgram()
-          && binding.referencePaths.every(reference => {
-            const member = reference.parentPath
-            const call = member?.parentPath
-            return Boolean(member?.isMemberExpression() && reference.key === 'object' && !member.node.computed
-              && member.get('property').isIdentifier({ name: 'map' })
-              && call?.isCallExpression() && member.key === 'callee')
-          }))
-        const staticArray = object.isArrayExpression() || Boolean(binding?.constant
-          && fixedModuleArray)
+        // A const array literal that nothing mutates is fixed for as long as the
+        // component exists, so its rows can be emitted once. Module scope shows
+        // that trivially; a declaration inside the component qualifies too,
+        // because the body runs once.
+        //
+        // An array that reads state, a derived value, a prop or context is a
+        // reactive binding by the time this runs, and reactive bindings are read
+        // live -- the call site is `xs().map(...)`. Its callee object is a call
+        // rather than an identifier, so no binding is resolved here and the
+        // array is refused instead of being emitted once and left stale. The
+        // `refuses a fixed array whose contents read ...` cases in
+        // apps/compat-audit/tests/runonce-constructs.test.ts pin that.
+        const onlyMapped = (candidate: Binding): boolean => candidate.referencePaths.every(reference => {
+          const member = reference.parentPath
+          const call = member?.parentPath
+          return Boolean(member?.isMemberExpression() && reference.key === 'object' && !member.node.computed
+            && member.get('property').isIdentifier({ name: 'map' })
+            && call?.isCallExpression() && member.key === 'callee')
+        })
+        const literal = binding?.constant && binding.path.isVariableDeclarator()
+          && t.isArrayExpression(binding.path.node.init) ? binding.path.get('init') as NodePath<t.ArrayExpression> : undefined
+        const ownedByThisComponent = Boolean(binding
+          && binding.scope.getFunctionParent() === path.scope.getFunctionParent())
+        const fixedArray = Boolean(literal && onlyMapped(binding!)
+          && (binding!.scope.path.isProgram() || ownedByThisComponent))
+        const staticArray = object.isArrayExpression() || fixedArray
         if (!staticArray) throw path.buildCodeFrameError('runOnce: lists require direct operation compilation; keyed reconciliation is disabled')
         path.node.extra = { ...(path.node.extra ?? {}), rrjsStaticMap: true }
       }

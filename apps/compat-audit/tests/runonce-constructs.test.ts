@@ -19,9 +19,17 @@ function compile(src: string): string {
   })!.code!
 }
 
+// No `runOnce` key at all: whatever the plugin defaults to is what runs.
+function compileWithDefaults(src: string): string {
+  return transformSync(src, {
+    plugins: [[plugin, { injectImports: false }]],
+    configFile: false, babelrc: false, sourceType: 'script',
+  })!.code!
+}
+
 interface Mounted { container: HTMLElement; bump: (v?: unknown) => void }
 
-function render(src: string, name: string): Mounted {
+function render(src: string, name: string, compiler: (s: string) => string = compile): Mounted {
   const container = document.createElement('div')
   document.body.appendChild(container)
   let bump: (v?: unknown) => void = () => {}
@@ -35,7 +43,7 @@ function render(src: string, name: string): Mounted {
   const values = [h, list, choose, c.derive, c.useState, c.useEffect, c.useMemo,
     c.useRef, c.useContext, c.createContext,
     (fn: (v?: unknown) => void) => { bump = fn }, ...helpers.map(n => r[n])]
-  const C = new Function(...names, `${compile(src)}
+  const C = new Function(...names, `${compiler(src)}
 return ${name};`)(...values)
   mount(C as never, container)
   return { container, bump }
@@ -154,6 +162,27 @@ describe('runOnce: supported ordinary React constructs', () => {
       .toThrow(/runOnce:/)
   })
 
+  it('renders a fixed array declared inside the component', () => {
+    // Ordinary React writes the data next to the markup. The body runs once and
+    // nothing mutates the binding, so the rows can be emitted directly.
+    const m = render(`function List(){ const people=[{id:0,name:'Creola'},{id:1,name:'Mario'},{id:2,name:'Mohammad'}]; const items=people.map(p=><li key={p.id}>{p.name}</li>); return <ul>{items}</ul>; }`, 'List', compileWithDefaults)
+    expect(m.container.querySelectorAll('li').length).toBe(3)
+    expect(txt(m.container)).toBe('CreolaMarioMohammad')
+  })
+
+  // A literal that reads anything reactive is rewritten into a derived binding
+  // before the list rule sees it, so it is no longer a fixed array and is
+  // refused rather than emitted once and left stale. These pin that boundary
+  // for each kind of reactive source.
+  it.each([
+    ['state', `function L(){ const [n,setN]=useState('x'); const xs=[{id:0,label:n}]; return <ul>{xs.map(x=><li key={x.id}>{x.label}</li>)}</ul>; }`],
+    ['a derived value', `function L(){ const [n,setN]=useState(1); const d=n*2; const xs=[{id:0,v:d}]; return <ul>{xs.map(x=><li key={x.id}>{x.v}</li>)}</ul>; }`],
+    ['a prop', `function Inner({label}){ const xs=[{id:0,v:label}]; return <ul>{xs.map(x=><li key={x.id}>{x.v}</li>)}</ul>; } function L(){ const [n,setN]=useState('p'); return <Inner label={n}/>; }`],
+    ['context', `const Ctx=createContext('d'); function Child(){ const v=useContext(Ctx); const xs=[{id:0,v:v}]; return <ul>{xs.map(x=><li key={x.id}>{x.v}</li>)}</ul>; } function L(){ return <Ctx.Provider value={'p'}><Child/></Ctx.Provider>; }`],
+  ])('refuses a fixed array whose contents read %s', (_kind, source) => {
+    expect(() => compileWithDefaults(source)).toThrow(/lists require direct operation compilation/)
+  })
+
   it('leaves a named lower-case JSX helper parameter alone', () => {
     // The props pass only claims capitalised bindings. `row` is a plain helper
     // whose parameter carries data, not props, so its `o.t` reads must survive
@@ -169,5 +198,32 @@ describe('runOnce: forms the compiler rejects rather than mis-compiling', () => 
   it('rejects a props parameter that escapes instead of guessing its shape', () => {
     expect(() => compile(`function Inner(p){ return <i>{p.a}</i>; } function Row(props){ return <Inner {...props}/>; } function Case(){ return <Row a={1}/>; }`))
       .toThrow(/runOnce:/)
+  })
+})
+
+describe('the documented example, compiled with default plugin options', () => {
+  // README shows this component. The default path follows React value
+  // semantics, so assert both that the React spelling works and that the older
+  // getter spelling is refused at build time rather than crashing on click.
+  const getterStyle = `function Counter(){ const [count,setCount]=useState(0); return <button onClick={()=>setCount(count()+1)}>Clicked {count} times</button>; }`
+  const valueStyle = `function Counter(){ const [count,setCount]=useState(0); return <button onClick={()=>setCount(count+1)}>Clicked {count} times</button>; }`
+
+  it('renders and updates the ordinary React spelling', () => {
+    const m = render(valueStyle, 'Counter', compileWithDefaults)
+    expect(txt(m.container)).toBe('Clicked 0 times')
+    m.container.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(txt(m.container)).toBe('Clicked 1 times')
+  })
+
+  it('refuses the getter spelling at build time instead of at the first click', () => {
+    expect(() => compileWithDefaults(getterStyle))
+      .toThrow(/state is a value here, so `count\(\)` calls it; read `count` instead/)
+  })
+
+  it('still accepts calling state that genuinely holds a function', () => {
+    // The diagnostic only fires when the initial value plainly cannot be
+    // called, so a function-valued state is left alone.
+    expect(() => compileWithDefaults(`function Case(){ const [fn,setFn]=useState(()=>()=>'x'); return <p>{fn()}</p>; }`))
+      .not.toThrow(/state is a value here/)
   })
 })
