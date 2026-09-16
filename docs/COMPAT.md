@@ -38,6 +38,8 @@ the behaviour React would produce, so it stops instead of guessing:
   supplied by external code and fixed arrays whose contents read reactive values;
 - `useEffect` with a dependency argument that is not a literal array, or a
   callback that is not written inline;
+- `useReducer`, a block-bodied `useMemo`, and any other hook outside
+  `useState`, `useRef`, `useEffect`, `useContext`, `useMemo` and `useCallback`;
 - context provider values other than scalars, owned bindings, and object or array
   literals built from those;
 - component props that escape through spread or computed access;
@@ -51,6 +53,10 @@ the behaviour React would produce, so it stops instead of guessing:
   changes, not after every render. A callback that reads nothing reactive runs
   once. Measured against React 19.2 and asserted in
   `apps/compat-audit/tests/effect-inferred-deps.test.ts`.
+- `useMemo` and `useCallback` ignore their dependency array; dependencies are
+  tracked from the expression's reads. `useMemo(() => n * 10, [])` freezes in
+  React and stays live here. Asserted against React 19.2 in
+  `apps/compat-audit/tests/react-pattern-corpus.test.ts`.
 - `useTransition` runs synchronously with no pending state, `useDeferredValue`
   returns its input, and `useInsertionEffect` behaves as a layout effect. These do
   not implement React scheduling.

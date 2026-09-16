@@ -156,6 +156,47 @@ export function compileRunOnce(
     },
   })
 
+  // `useMemo` and `useCallback` exist in React because the component body runs
+  // again on every render: one caches a result across those runs, the other
+  // keeps a function's identity stable across them. Neither happens here. The
+  // body runs once, so a function written in it is already created once, and a
+  // derived expression is already a computation that recomputes only when
+  // something it reads changes.
+  //
+  // So both unwrap to the value they were wrapping, and the rest of the compiler
+  // sees ordinary source. The dependency array is dropped: dependencies are
+  // tracked from the reads themselves. That differs from React for a list that
+  // deliberately understates the reads -- `useMemo(() => x, [])` freezes in
+  // React and stays live here -- and that difference is asserted in
+  // apps/compat-audit/tests/react-pattern-corpus.test.ts rather than left
+  // unstated.
+  program.traverse({
+    CallExpression(path) {
+      const hook = hookName(path)
+      if (hook !== 'useMemo' && hook !== 'useCallback') return
+      const args = path.get('arguments')
+      if (args.length > 2) {
+        throw path.buildCodeFrameError(`runOnce: ${hook} takes a function and an optional dependency array`)
+      }
+      const fn = args[0]
+      if (!fn || !(fn.isArrowFunctionExpression() || fn.isFunctionExpression())) {
+        throw path.buildCodeFrameError(`runOnce: ${hook} requires an inline function`)
+      }
+      if (fn.node.async || fn.node.generator || fn.node.params.length > 0) {
+        throw path.buildCodeFrameError(`runOnce: ${hook} requires a plain zero-argument function`)
+      }
+      if (hook === 'useCallback') {
+        // The identity is already stable, so the wrapper is the only thing to remove.
+        path.replaceWith(fn.node)
+        return
+      }
+      if (t.isBlockStatement(fn.node.body)) {
+        throw path.buildCodeFrameError('runOnce: useMemo requires an expression body in the current scope')
+      }
+      path.replaceWith(fn.node.body)
+    },
+  })
+
   // Import spelling can hide a hook from call-site name checks. Only direct
   // named supported hook calls have established state-binding semantics.
   program.traverse({
@@ -1707,7 +1748,8 @@ export function compileRunOnce(
         && [...customHooks.keys()].some(binding => binding.path.node === localHookBinding.path.node))
       const analyzedHook = Boolean(t.isIdentifier(callee) && isImportedReactiveHook(localHookBinding))
       if (/^use[A-Z]/.test(hookSyntax) && !name && !localHook && !analyzedHook) throw path.buildCodeFrameError('runOnce: custom and namespace hook calls require additional compiler analysis; use named supported hooks')
-      if (name && /^use[A-Z]/.test(name) && name !== 'useState' && name !== 'useRef' && name !== 'useEffect' && name !== 'useContext') throw path.buildCodeFrameError(`runOnce: ${name} is not supported by this compiler pass yet`)
+      const supportedHooks = new Set(['useState', 'useRef', 'useEffect', 'useContext', 'useCallback', 'useMemo'])
+      if (name && /^use[A-Z]/.test(name) && !supportedHooks.has(name)) throw path.buildCodeFrameError(`runOnce: ${name} is not supported by this compiler pass yet`)
       if (t.isMemberExpression(path.node.callee) && t.isIdentifier(path.node.callee.property, { name: 'map' })) {
         const object = path.get('callee.object')
         const binding = object.isIdentifier() ? object.scope.getBinding(object.node.name) : undefined

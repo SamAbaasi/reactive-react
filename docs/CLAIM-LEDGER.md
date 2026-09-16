@@ -27,7 +27,21 @@ supports a performance claim.
 | The compiler infers arbitrary module contracts | Unsupported | “Manual exact-path contracts identify supported imports.” |
 | Opaque replacement lists preserve keyed identity | Unsupported, Phase 5 blocker | “Opaque replacement arrays are rejected.” |
 | Faster, smaller or lower-memory than React | Unverified for the current compiler path. Roadmap P8 | Make no numerical or comparative performance claim. |
-| The packages are installable from npm | Not published. Only local tarballs are verified | “Four packages, verified against a fresh local consumer.” |
+| The published npm packages contain this compiler | They do not. `@rrjs/signals@0.1.2`, `@rrjs/react-compat@0.1.0`, `@rrjs/renderer@0.1.7` and `@rrjs/babel-plugin@0.1.1` were published in May 2026. The May tarball of the plugin contains no `runOnce` and no `run-once.js`; its `dist/` is `index.js` and `index.d.ts` only | “Four packages are on npm, but the published versions predate this compiler. Installing them today gives the older path.” |
+
+## Release state
+
+The four packages exist on npm under `samabaasi`, published in May 2026 and one
+patch version behind the working tree. None of them contain the compiler: the
+published `@rrjs/babel-plugin@0.1.1` tarball has no `runOnce` option and no
+`run-once.js`, and `run-once.ts` first enters this repository's history in
+September 2026.
+
+So `npm install @rrjs/...` today installs the older reactive-wrapping path, on
+which an ordinary React counter renders the source text of a getter. Everything
+verified in this ledger is verified against the working tree, not against
+anything a reader can install. Publishing the current tree is a breaking change
+for existing installs and needs a version bump larger than a patch.
 
 ## Differences from React that must be stated, not omitted
 
@@ -36,22 +50,35 @@ supports a performance claim.
 | `useEffect(fn)` with no dependency array | Re-runs when a value the callback reads changes, not after every render. A callback reading nothing reactive runs once; React reaches `"xx"` where this reaches `"x"` | `apps/compat-audit/tests/effect-inferred-deps.test.ts`, which asserts both sides |
 | `count()` on a non-callable state value | Rejected at build time rather than failing on first interaction | `apps/compat-audit/tests/runonce-constructs.test.ts` |
 | `useTransition`, `useDeferredValue`, `useInsertionEffect` | Present but do not implement React scheduling | `docs/COMPAT.md` |
+| `useMemo` and `useCallback` dependency arrays | Ignored; dependencies come from the expression's reads. `useMemo(() => n * 10, [])` freezes in React and stays live here | `apps/compat-audit/tests/react-pattern-corpus.test.ts`, which measures both sides |
 
 ## Current evidence
 
-Source digest `f4ec3239ef298d44fbba82ea5bc5b16d80f5d7e3d01584c7447fbdae032d9084`,
-covering the 123 hashed source files. All three gates pass at that digest in
+Source digest `5250f1493a95a3e1bbff20e44ea470c09b52937818255e76d3c3603a541fafe6`,
+covering the 124 hashed source files. All eight gates pass at that digest in
 Chrome 152.0.7977.83:
 
-- Phase 5 — `.private/acceptance/2026-09-16T11-25-01-535Z/report.json`, 10 steps;
-- Phase 6 — `.private/acceptance/2026-09-16T11-26-12-633Z/report.json`, 15 steps;
-- Phase 7 — `.private/acceptance/2026-09-16T11-28-22-319Z/report.json`, 18 steps.
+| Gate | Steps | Report under `.private/acceptance/` |
+| --- | --- | --- |
+| Phase 0 | 10 | `2026-09-16T12-18-26-195Z` |
+| Phase 1 | 10 | `2026-09-16T12-19-29-272Z` |
+| Phase 2 | 10 | `2026-09-16T12-20-33-066Z` |
+| Phase 3 | 10 | `2026-09-16T12-21-38-632Z` |
+| Phase 4 | 10 | `2026-09-16T12-22-46-048Z` |
+| Phase 5 | 10 | `2026-09-16T12-23-57-528Z` |
+| Phase 6 | 15 | `2026-09-16T12-25-05-061Z` |
+| Phase 7 | 18 | `2026-09-16T12-26-47-527Z` |
 
-Suites at that digest: 287 package tests across 4 packages and 153 integration
-tests across 17 files, with no failures and no skips. Every test asserts a result; the repository contains no
-`expect(true)`, `.skip` or `.only`. That makes a passing run evidence for the
-cases it covers and for nothing beyond them.
+Suites at that digest: 287 package tests across 4 packages and 172 integration
+tests across 18 files, with no failures and no skips. Every test asserts a
+result; the repository contains no `expect(true)`, `.skip` or `.only`. That makes
+a passing run evidence for the cases it covers and for nothing beyond them.
 
-Re-run `npm run verify:phase5`, `verify:phase6` and `verify:phase7` after any
-change to a hashed source file. Reports do not certify code they did not run
-against, and the harness refuses to certify a tree that changed mid-run.
+Seventeen of the eighteen ordinary React patterns in
+`apps/compat-audit/tests/react-pattern-corpus.test.ts` compile and run on the
+default path. The one refusal, `useReducer`, is asserted as a refusal rather
+than omitted from the count.
+
+Re-run the gates after any change to a hashed source file. Reports do not
+certify code they did not run against, and the harness refuses to certify a tree
+that changed mid-run.

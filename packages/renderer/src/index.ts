@@ -462,6 +462,38 @@ if (typeof child === 'function') {
 
 // ─── Set an attribute ───────────────────────────────────────────────────────
 
+// React writes a bare number as pixels for every property that takes a length,
+// and leaves the unitless ones alone. Assigning the number directly does
+// nothing at all -- `style.width = 10` is dropped by the DOM -- so the value has
+// to carry its unit before it is set.
+const UNITLESS_STYLE_PROPERTIES = new Set([
+  'animationIterationCount', 'aspectRatio', 'borderImageOutset', 'borderImageSlice',
+  'borderImageWidth', 'boxFlex', 'boxFlexGroup', 'boxOrdinalGroup', 'columnCount',
+  'columns', 'flex', 'flexGrow', 'flexPositive', 'flexShrink', 'flexNegative',
+  'flexOrder', 'gridArea', 'gridRow', 'gridRowEnd', 'gridRowSpan', 'gridRowStart',
+  'gridColumn', 'gridColumnEnd', 'gridColumnSpan', 'gridColumnStart', 'fontWeight',
+  'lineClamp', 'lineHeight', 'opacity', 'order', 'orphans', 'tabSize', 'widows',
+  'zIndex', 'zoom', 'fillOpacity', 'floodOpacity', 'stopOpacity', 'strokeDasharray',
+  'strokeDashoffset', 'strokeMiterlimit', 'strokeOpacity', 'strokeWidth',
+])
+
+function styleValue(property: string, value: unknown): string {
+  if (typeof value !== 'number') return value == null ? '' : String(value)
+  if (value === 0 || UNITLESS_STYLE_PROPERTIES.has(property)) return String(value)
+  return `${value}px`
+}
+
+function applyStyle(el: HTMLElement | SVGElement, value: Record<string, unknown>): void {
+  for (const property of Object.keys(value)) {
+    const next = value[property]
+    if (next == null || next === false) {
+      ;(el.style as unknown as Record<string, string>)[property] = ''
+      continue
+    }
+    ;(el.style as unknown as Record<string, string>)[property] = styleValue(property, next)
+  }
+}
+
 function setAttribute(el: Element, key: string, value: any): void {
   if (key === 'defaultValue' && 'defaultValue' in el) {
     ;(el as HTMLInputElement | HTMLTextAreaElement).defaultValue = value == null ? '' : String(value)
@@ -513,7 +545,7 @@ function setAttribute(el: Element, key: string, value: any): void {
 
   // style object — Object.assign keeps it cheap; we don't deep-compare
   if (key === 'style' && typeof value === 'object') {
-    Object.assign((el as HTMLElement | SVGElement).style, value)
+    applyStyle(el as HTMLElement | SVGElement, value as Record<string, unknown>)
     return
   }
 

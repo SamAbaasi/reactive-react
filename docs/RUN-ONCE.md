@@ -40,6 +40,19 @@ contains a keyed-list reconciler; the new compiler path excludes it.
   an effect appending to a string on every run reaches `"xx"` under React after
   one click and `"x"` here. `apps/compat-audit/tests/effect-inferred-deps.test.ts`
   asserts both sides of that comparison.
+- `useMemo` and `useCallback` unwrap to what they wrap. Both exist in React
+  because the body runs again on every render: one caches a result across those
+  runs, the other keeps a function's identity stable. Neither happens here, so
+  `useMemo(fn, deps)` compiles to its expression -- which is already a
+  computation that recomputes when its reads change -- and `useCallback(fn, deps)`
+  compiles to `fn`, whose identity is already created once.
+
+  The dependency array is dropped, because dependencies come from the reads
+  themselves. A list that deliberately understates them therefore behaves
+  differently: `useMemo(() => n * 10, [])` freezes at the first value in React
+  and stays live here. Both sides are asserted in
+  `apps/compat-audit/tests/react-pattern-corpus.test.ts`. A block-bodied
+  `useMemo`, a parameterised one, or `useReducer` are still refused.
 - Direct local function components support reactive/destructured props, static
   defaults, inline callbacks, one lazy child and primitive render-prop results.
   Direct local context providers/consumers, conditional context snapshots,
