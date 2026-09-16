@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createSignal, effect, computed } from '../src/index'
 
-describe('edge cases — Stage 1 acceptance', () => {
+describe('edge cases', () => {
 
   // ─── Same-value bailout ─────────────────────────────────────────────────
-  // Stage 1 requirement: setCount(5); setCount(5) — subscribers should NOT
+  // setCount(5); setCount(5) — subscribers should NOT
   // be notified the second time. This is "best effort" semantics matching
   // React's Object.is comparison.
 
@@ -83,7 +83,7 @@ describe('edge cases — Stage 1 acceptance', () => {
   })
 
   // ─── Async tracking failure ────────────────────────────────────────────
-  // Stage 1 requirement: signals read inside setTimeout, await, requestAnimationFrame
+  // signals read inside setTimeout, await, requestAnimationFrame
   // callbacks do NOT track. The observer stack is synchronous — by the time
   // the async callback runs, the effect has already popped off the stack.
   // This is documented behavior, not a bug.
@@ -150,7 +150,7 @@ describe('edge cases — Stage 1 acceptance', () => {
   })
 
   // ─── Cycle behavior ─────────────────────────────────────────────────────
-  // Stage 1 requirement: "must not infinite loop"
+  // "must not infinite loop"
   // Setting a signal you depend on creates a self-update. The wave-based
   // scheduler should NOT re-enter the same effect within one wave.
   // The current implementation handles this because pendingEffects.clear()

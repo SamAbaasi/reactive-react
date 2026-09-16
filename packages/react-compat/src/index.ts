@@ -1,16 +1,16 @@
-export { useRef } from './hooks/useRef'
-export type { RefObject } from './hooks/useRef'
+export { useRef } from './hooks/useRef.js'
+export type { RefObject } from './hooks/useRef.js'
 
-export { useState } from './hooks/useState'
-export { useReducer } from './hooks/useReducer'
-export { useMemo } from './hooks/useMemo'
-export { useCallback } from './hooks/useCallback'
-export { useEffect } from './hooks/useEffect'
-export { useLayoutEffect } from './hooks/useLayoutEffect'
-export { useContext } from './hooks/useContext'
-export { useId } from './hooks/useId'
-export { useImperativeHandle } from './hooks/useImperativeHandle'
-export { useSyncExternalStore } from './hooks/useSyncExternalStore'
+export { useState } from './hooks/useState.js'
+export { useReducer } from './hooks/useReducer.js'
+export { useMemo } from './hooks/useMemo.js'
+export { useCallback } from './hooks/useCallback.js'
+export { useEffect } from './hooks/useEffect.js'
+export { useLayoutEffect } from './hooks/useLayoutEffect.js'
+export { useContext } from './hooks/useContext.js'
+export { useId } from './hooks/useId.js'
+export { useImperativeHandle } from './hooks/useImperativeHandle.js'
+export { useSyncExternalStore } from './hooks/useSyncExternalStore.js'
 
 // Documented no-ops — Tier 3 in the compatibility contract
 export {
@@ -18,18 +18,20 @@ export {
   useDeferredValue,
   useInsertionEffect,
   useDebugValue,
-} from './hooks/noop-hooks'
+} from './hooks/noop-hooks.js'
 
-export { forwardRef, isForwardRef, FORWARD_REF } from './forwardRef'
-export type { Ref, ForwardRefComponent } from './forwardRef'
+export { forwardRef, isForwardRef, FORWARD_REF } from './forwardRef.js'
+export type { Ref, ForwardRefComponent } from './forwardRef.js'
 
 export {
   createContext,
   withProvider,
   pushContext,
   popContext,
-} from './context'
-export type { Context } from './context'
+  captureContext,
+  withContextSnapshot,
+} from './context.js'
+export type { Context, ContextSnapshot } from './context.js'
 
 export {
   createInstance,
@@ -38,5 +40,6 @@ export {
   setCurrentInstance,
   flushLayoutEffects,
   flushPassiveEffects,
-} from './instance'
-export type { ComponentInstance, EffectEntry } from './instance'
+} from './instance.js'
+export type { ComponentInstance, EffectEntry } from './instance.js'
+export { derive } from './derive.js'

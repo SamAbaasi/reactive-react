@@ -1,5 +1,5 @@
 import { createSignal } from '@rrjs/signals'
-import { getCurrentInstance } from '../instance'
+import { getCurrentInstance } from '../instance.js'
 
 // React-shim useState — but honest about JavaScript's constraints.
 //
@@ -41,7 +41,8 @@ export function useState<T>(
     // applies the updater, and writes the result.
     const dispatch = (action: SetStateAction<T>): void => {
       if (typeof action === 'function') {
-        setter((action as (prev: T) => T)(getter()))
+        const value = (action as (prev: T) => T)(getter())
+        setter(() => value)
       } else {
         setter(action)
       }

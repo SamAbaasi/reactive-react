@@ -1,0 +1,214 @@
+/* One stylesheet, applied to both panes. The .test-data table rules below are
+   deliberately shared: giving either renderer different CSS would change layout
+   cost and invalidate the comparison. */
+
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --line: #30363d;
+  --text: #e6edf3;
+  --dim: #8b949e;
+  --react: #58c4dc;
+  --rrjs: #f0b132;
+  --ok: #3fb950;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.topbar {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.topbar h1 .sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--dim);
+  letter-spacing: 0;
+}
+
+.controls { display: flex; gap: 10px; flex-wrap: wrap; }
+
+button {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 550;
+  padding: 9px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) { border-color: var(--dim); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.primary {
+  background: var(--rrjs);
+  border-color: var(--rrjs);
+  color: #241a02;
+  font-weight: 650;
+}
+
+.status {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: var(--dim);
+  min-height: 1.4em;
+}
+
+.status.busy { color: var(--rrjs); }
+
+.conditions {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  color: var(--dim);
+  max-width: 105ch;
+}
+
+.conditions strong { color: var(--text); }
+
+.cpu {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Panes ───────────────────────────────────────────────────────────────── */
+
+.panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+.pane { background: var(--bg); min-width: 0; display: flex; flex-direction: column; }
+
+.pane-head { padding: 16px 20px 14px; border-bottom: 1px solid var(--line); }
+
+.pane h2 { margin: 0 0 12px; font-size: 20px; font-weight: 650; }
+.pane--react h2 { color: var(--react); }
+.pane--rrjs h2 { color: var(--rrjs); }
+
+.readout { display: flex; gap: 28px; align-items: baseline; }
+
+.metric { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+
+.metric .value {
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.metric--big .value { font-size: 60px; }
+
+.metric .unit { font-size: 17px; color: var(--dim); }
+
+.metric .label {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--dim);
+}
+
+.pane--react .metric .value { color: var(--react); }
+.pane--rrjs .metric .value { color: var(--rrjs); }
+
+.spread, .split {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.split--none { font-style: italic; }
+.split--loaf { color: var(--text); }
+
+.scroller { height: 46vh; overflow: auto; }
+
+/* ── The table under test — identical rules for both panes ───────────────── */
+
+.test-data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.test-data td {
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.test-data .col-md-1 { width: 9%; color: var(--dim); font-variant-numeric: tabular-nums; }
+.test-data .col-md-4 { width: 42%; }
+.test-data .col-md-6 { width: 40%; }
+
+.test-data a { color: var(--text); text-decoration: none; cursor: pointer; }
+.test-data tr.danger td { background: #3b1d1d; }
+
+.glyphicon-remove::after { content: "\00d7"; color: var(--dim); }
+
+/* ── DOM comparison output ───────────────────────────────────────────────── */
+
+.compare { padding: 20px 24px; border-top: 1px solid var(--line); }
+.compare h3 { margin: 0 0 6px; font-size: 18px; }
+
+.compare .count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dim);
+  margin-left: 8px;
+}
+
+.compare .note { margin: 0 0 12px; font-size: 13.5px; color: var(--dim); max-width: 100ch; }
+
+.difftable { border-collapse: collapse; font-size: 13px; width: 100%; }
+.difftable th, .difftable td { text-align: left; padding: 6px 10px; border: 1px solid var(--line); }
+.difftable th { color: var(--dim); font-weight: 550; }
+.difftable .react { color: var(--react); }
+.difftable .rrjs { color: var(--rrjs); }
+.difftable .ok { color: var(--ok); }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+
+.footnote {
+  padding: 16px 24px 28px;
+  font-size: 13px;
+  color: var(--dim);
+  max-width: 120ch;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 1000px) {
+  .panes { grid-template-columns: 1fr; }
+  .scroller { height: 34vh; }
+}

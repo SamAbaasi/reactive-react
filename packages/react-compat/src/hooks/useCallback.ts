@@ -1,4 +1,4 @@
-import { getCurrentInstance } from '../instance'
+import { getCurrentInstance } from '../instance.js'
 
 interface UseCallbackHook<T> {
   fn: T

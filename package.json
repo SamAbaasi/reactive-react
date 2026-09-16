@@ -1,0 +1,32 @@
+{
+  "name": "reactive-react",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo root: tooling and scripts for the @rrjs/* packages. Not published.",
+  "type": "module",
+  "scripts": {
+    "install:all": "node scripts/install-all.mjs",
+    "build:all": "node scripts/build-all.mjs",
+    "test:all": "node scripts/test-all.mjs",
+    "oracle": "npm --prefix apps/oracle run oracle",
+    "audit": "npm --prefix apps/compat-audit test",
+    "bench:summarise": "node scripts/bench/summarise.mjs",
+    "bench:env": "node scripts/bench/capture-env.mjs",
+    "bench:sync": "node scripts/bench/sync-adapters.mjs",
+    "signal:3line": "node scripts/three-line-signal.mjs",
+    "verify:node-esm": "node scripts/verify-node-esm.mjs",
+    "verify:consumer": "node scripts/verify-external-consumer.mjs",
+    "verify:run-once": "node scripts/verify-run-once.mjs",
+    "verify:phase0": "node scripts/acceptance/run.mjs",
+    "verify:phase1": "node scripts/acceptance/run.mjs --phase=1",
+    "verify:phase2": "node scripts/acceptance/run.mjs --phase=2",
+    "verify:phase3": "node scripts/acceptance/run.mjs --phase=3",
+    "verify:phase4": "node scripts/acceptance/run.mjs --phase=4",
+    "verify:phase5": "node scripts/acceptance/run.mjs --phase=5",
+    "verify:phase6:browser": "node scripts/verify-phase6-browser.mjs",
+    "verify:phase6": "node scripts/acceptance/run.mjs --phase=6",
+    "verify:phase7": "node scripts/acceptance/run.mjs --phase=7"
+  },
+  "license": "MIT",
+  "author": "Saman Abaasi <samyar1992@gmail.com>"
+}

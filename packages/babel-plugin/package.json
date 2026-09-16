@@ -1,10 +1,16 @@
 {
   "name": "@rrjs/babel-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Babel plugin that compiles JSX to h() calls with reactive bindings for Reactive React",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
     "README.md",
@@ -18,21 +24,30 @@
   },
   "dependencies": {
     "@babel/core": "^7.24.0",
+    "@babel/helper-module-imports": "^7.29.7",
     "@babel/plugin-syntax-jsx": "^7.24.0",
-    "@babel/types": "^7.24.0"
+    "@babel/types": "^7.24.0",
+    "@types/babel__core": "^7.20.5"
   },
   "devDependencies": {
     "@babel/preset-typescript": "^7.24.0",
-    "@types/babel__core": "^7.20.5",
-    "vitest": "^1.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   },
-  "license": "MIT",
-  "author": "Saman Abaasi <samabaasii@gmail.com>",
+  "peerDependencies": {
+    "@rrjs/renderer": "*"
+  },
+  "author": "Saman Abaasi <samyar1992@gmail.com>",
   "repository": {
     "type": "git",
     "url": "https://github.com/SamAbaasi/reactive-react.git",
     "directory": "packages/babel-plugin"
   },
-  "keywords": ["babel", "babel-plugin", "jsx", "reactive-react", "signals"]
+  "keywords": [
+    "babel",
+    "babel-plugin",
+    "jsx",
+    "reactive-react",
+    "signals"
+  ]
 }

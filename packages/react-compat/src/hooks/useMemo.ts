@@ -1,5 +1,5 @@
 import { computed } from '@rrjs/signals'
-import { getCurrentInstance } from '../instance'
+import { getCurrentInstance } from '../instance.js'
 
 interface UseMemoHook<T> {
   getter: () => T

@@ -1,19 +1,12 @@
 # Reactive React
 
-A signal-based UI library with a React-compatible API. Components run once. No virtual DOM.
+An experimental signal-based UI library with JSX and React-shaped hooks. Components run once per mount; reactive bindings update the DOM directly. Keyed lists use reconciliation.
 
-Reactive React lets you write components in JSX with React hooks (`useState`, `useEffect`, `useMemo`, and the rest), but underneath, your components run exactly once. Updates happen through fine-grained signal subscriptions that touch only the DOM nodes that actually need to change.
+Ordinary unmodified React components are not yet supported generally. State values, effect dependencies, context, and derived control flow still differ. See [Compatibility](./docs/COMPAT.md).
 
-```
-┌─────────────────────────────────────────────────────┐
-│  4.2 kB gzipped — 11× smaller than React            │
-│  155 ms first paint — 45% faster than React         │
-│  3.5 MB memory — better than React, ~SolidJS        │
-│  197 tests passing — full hooks API compatibility   │
-└─────────────────────────────────────────────────────┘
-```
+## Run-once compiler experiment
 
----
+The opt-in `runOnce: true` compiler supports a checked subset of ordinary React source with one component execution per mount and no keyed reconciler calls. See [the supported scope, evidence, and runnable demo](./docs/RUN-ONCE.md). It does not yet support the full issue application.
 
 ## Quick Look
 
@@ -38,7 +31,7 @@ Two differences from React:
 1. `count` is a getter: write `count()` outside JSX, but `{count}` inside JSX still works thanks to the Babel plugin
 2. The component function runs once when mounted, not on every state change — the signal updates the DOM directly
 
-Everything else — `useEffect`, `useMemo`, `useCallback`, `useRef`, `useContext`, `useReducer`, refs, forwardRef, context, the lot — works the way React does.
+Other React APIs have important semantic differences; see the compatibility document before migrating an application.
 
 ---
 
@@ -55,37 +48,29 @@ See [`docs/MIGRATION.md`](./docs/MIGRATION.md) for Vite, Webpack, and esbuild se
 
 ## Packages
 
-| Package | Purpose | Tests |
-|---------|---------|-------|
-| [`@rrjs/signals`](./packages/signals) | Reactive primitives: `createSignal`, `effect`, `computed`, `batch` | 25 |
-| [`@rrjs/renderer`](./packages/renderer) | DOM renderer with keyed list reconciliation | 32 |
-| [`@rrjs/react-compat`](./packages/react-compat) | React hooks API on top of signals | 110 |
-| [`@rrjs/babel-plugin`](./packages/babel-plugin) | JSX → `h()` transform with reactive wrapping | 30 |
+| Package | Purpose |
+| --- | --- |
+| @rrjs/signals | Signals, computed values, effects, batching |
+| @rrjs/renderer | DOM bindings and keyed lists |
+| @rrjs/react-compat | React-shaped hooks over signals |
+| @rrjs/babel-plugin | JSX compilation with reactive bindings |
 
-**Total: 197 tests, 100% passing.**
+Run node scripts/test-all.mjs for current package results. Test counts alone do not establish React compatibility.
+
+---------|---------|-------|
+| [`@rrjs/signals`](./packages/signals) | Reactive primitives: `createSignal`, `effect`, `computed`, `batch` | 53 |
+| [`@rrjs/renderer`](./packages/renderer) | DOM renderer with keyed list reconciliation | 76 |
+| [`@rrjs/react-compat`](./packages/react-compat) | React hooks API on top of signals | 111 |
+| [`@rrjs/babel-plugin`](./packages/babel-plugin) | JSX → `h()` transform with reactive wrapping | 44 |
+
+**Total: 284 package tests, 0 failing, 0 skipped.** A further 124 integration
+tests run from `apps/compat-audit` (`npm test --prefix apps/compat-audit`).
 
 ---
 
 ## Performance
 
-Tested with the official [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) Chrome harness (4× CPU throttling, 15 iterations, median reported).
-
-| Test | Reactive React | React 19 | SolidJS |
-|------|----------------|----------|---------|
-| Create 1,000 rows | **67 ms** | 70 ms | 36 ms |
-| Replace 1,000 rows | **69 ms** | 75 ms | 40 ms |
-| Update every 10th | 41 ms | 40 ms | 16 ms |
-| Swap rows | 49 ms | 35 ms | 21 ms |
-| Clear | **30 ms** | 30 ms | 13 ms |
-| Bundle (gzip) | **4.2 kB** | 46 kB | 8 kB |
-| First paint | **155 ms** | 280 ms | 180 ms |
-| Memory (1k rows) | **3.5 MB** | 5.5 MB | 3.4 MB |
-
-**Honest summary:** Reactive React is competitive with React on every test and beats it on bulk operations, bundle size, memory, and first paint. SolidJS remains faster on single-row targeted operations (select, remove) by 2-4×; closing that gap is a v0.2 milestone.
-
-Full benchmark methodology, raw numbers, and honest analysis in [`BENCHMARKS.md`](./BENCHMARKS.md).
-
----
+Historical measurements and raw artifacts are available in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) and bench-results/. They are not current-branch measurements. Runtime correctness fixes change the measured implementation; performance must be rerun after behavior matches.
 
 ## How It Works
 
@@ -141,7 +126,7 @@ See [`docs/COMPAT.md`](./docs/COMPAT.md) for the full compatibility contract.
 ## Demo Apps
 
 - [`apps/demo`](./apps/demo) — minimal counter with JSX and hooks
-- [`apps/todomvc`](./apps/todomvc) — full TodoMVC with editing, filtering, localStorage
+- [`apps/todomvc`](./apps/todomvc) — TodoMVC example; localStorage update effects still need compatibility work
 - [`apps/benchmark`](./apps/benchmark) — js-framework-benchmark adapter
 
 To run TodoMVC locally:

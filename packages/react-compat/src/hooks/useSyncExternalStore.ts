@@ -1,5 +1,5 @@
 import { createSignal, effect } from '@rrjs/signals'
-import { getCurrentInstance } from '../instance'
+import { getCurrentInstance } from '../instance.js'
 
 type Subscribe = (onStoreChange: () => void) => () => void
 

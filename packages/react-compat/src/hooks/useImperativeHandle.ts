@@ -1,5 +1,5 @@
-import { getCurrentInstance, EffectEntry } from '../instance'
-import type { Ref } from '../forwardRef'
+import { getCurrentInstance, EffectEntry } from '../instance.js'
+import type { Ref } from '../forwardRef.js'
 
 interface UseImperativeHandleHook {
   deps: ReadonlyArray<unknown> | undefined

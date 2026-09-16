@@ -1,37 +1,25 @@
-// ─── Context — Stack-Based Propagation ──────────────────────────────────────
-// Without a VDOM tree to walk, we use mount-time scoping:
-//   - When a Provider mounts its children, it pushes its value onto the stack.
-//   - useContext reads the current top of the stack for that context.
-//   - When children finish mounting, the Provider pops its value.
-//
-// This works because mounting is synchronous and depth-first — the same property
-// React relies on for hook positional ordering.
-
 export interface Context<T> {
   _id: symbol
   _defaultValue: T
   Provider: (props: { value: T; children: any }) => any
 }
 
-// One stack per context, keyed by the unique _id symbol
+type ProviderMarker<T> = Context<T>['Provider'] & {
+  _isProvider: true
+  _context: Context<T>
+}
+
 const contextStacks = new Map<symbol, unknown[]>()
+export type ContextSnapshot = Map<symbol, unknown[]>
 
 export function createContext<T>(defaultValue: T): Context<T> {
   const id = Symbol('Context')
-
-  const Provider = (props: { value: T; children: any }) => {
-    pushContext(id, props.value)
-    // The renderer will call this and use the returned children.
-    // It's responsible for popping after the children finish mounting —
-    // we handle that via withProvider() below.
-    return props.children
-  }
-
-  return {
-    _id: id,
-    _defaultValue: defaultValue,
-    Provider,
-  }
+  const Provider = (props: { value: T; children: any }) => props.children
+  const context: Context<T> = { _id: id, _defaultValue: defaultValue, Provider }
+  const marked = Provider as ProviderMarker<T>
+  marked._isProvider = true
+  marked._context = context
+  return context
 }
 
 export function pushContext(id: symbol, value: unknown): void {
@@ -45,30 +33,35 @@ export function pushContext(id: symbol, value: unknown): void {
 
 export function popContext(id: symbol): void {
   const stack = contextStacks.get(id)
-  if (stack && stack.length > 0) {
-    stack.pop()
-  }
+  if (stack?.length) stack.pop()
 }
 
 export function readContext<T>(context: Context<T>): T {
   const stack = contextStacks.get(context._id)
-  if (stack && stack.length > 0) {
-    return stack[stack.length - 1] as T
-  }
-  return context._defaultValue
+  return stack?.length ? stack[stack.length - 1] as T : context._defaultValue
 }
 
-// Used by tests and the renderer to wrap a function call with a Provider's value.
-// Pushes value before fn runs, pops after — even if fn throws.
-export function withProvider<T, R>(
-  context: Context<T>,
-  value: T,
-  fn: () => R
-): R {
+export function withProvider<T, R>(context: Context<T>, value: T, fn: () => R): R {
   pushContext(context._id, value)
   try {
     return fn()
   } finally {
     popContext(context._id)
+  }
+}
+
+export function captureContext(): ContextSnapshot {
+  return new Map([...contextStacks].map(([id, stack]) => [id, [...stack]]))
+}
+
+export function withContextSnapshot<T>(snapshot: ContextSnapshot, fn: () => T): T {
+  const previous = captureContext()
+  contextStacks.clear()
+  for (const [id, stack] of snapshot) contextStacks.set(id, [...stack])
+  try {
+    return fn()
+  } finally {
+    contextStacks.clear()
+    for (const [id, stack] of previous) contextStacks.set(id, stack)
   }
 }

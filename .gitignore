@@ -6,3 +6,23 @@ dist/
 coverage/
 .env
 .env.local
+
+# vendored benchmark harness (cloned by scripts/bench/setup-harness.mjs)
+.bench-harness/
+bench-results/*.json
+
+# oracle build artifact
+apps/oracle/.build/rrjs.mjs
+
+# Local notes and editor configuration
+.private/
+.claude/
+
+# Example build output
+apps/flip/dist-react/
+apps/flip/dist-rrjs/
+apps/flip/dist-run-once/
+apps/flip/dist-run-once-reference/
+apps/flip/dist-phase6/
+apps/flip/dist-phase7/
+apps/flip/dist-phase7-react/

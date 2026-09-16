@@ -84,12 +84,16 @@ esbuild does not support Babel plugins natively. Use the Vite or Webpack setup a
 
 ### Entry point
 
-In your application's entry file, make `h` globally available — the Babel plugin compiles JSX to `h()` calls and assumes `h` is in scope:
+The plugin injects `import { h, list } from '@rrjs/renderer'` into every file that emits those calls. Your entry file only needs `mount`:
 
 ```ts
-import { h } from '@rrjs/renderer'
-;(globalThis as any).h = h
+import { mount } from '@rrjs/renderer'
+import { App } from './App'
+
+mount(App, document.getElementById('app')!)
 ```
+
+The compiler injects runtime imports by default; global runtime assignments are unnecessary.
 
 ---
 
@@ -267,14 +271,8 @@ You probably wrote `count` somewhere outside JSX where you needed `count()`. Loo
 **Imports throw "Hook called outside of a component".**
 You called a hook from a regular function (one that wasn't mounted via `mount()`). All hooks must run inside the body of a component function that the renderer mounts.
 
-**TypeScript complains about `globalThis.h`.**
-Add a global type declaration:
-```ts
-// src/global.d.ts
-declare global {
-  const h: typeof import('@rrjs/renderer').h
-}
-```
+**A file throws `h is not defined`.**
+The plugin is not running on that file, or `injectImports` was set to `false`. Under the default (automatic) runtime the plugin injects the import itself. `@rrjs/renderer` must be installed — it is a peer of `@rrjs/babel-plugin`.
 
 **Refs don't attach to DOM elements.**
 This was a bug before v0.1.0. Update to the latest published version. The Babel plugin now passes `ref` through without wrapping.

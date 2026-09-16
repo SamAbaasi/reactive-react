@@ -1,0 +1,34 @@
+{
+  "name": "js-framework-benchmark-reactive-react",
+  "version": "1.0.0",
+  "description": "Reactive React keyed",
+  "main": "index.js",
+  "type": "module",
+  "js-framework-benchmark": {
+    "frameworkVersionFromPackage": "@rrjs/renderer",
+    "frameworkHomeURL": "https://github.com/SamAbaasi/reactive-react",
+    "language": "TypeScript"
+  },
+  "scripts": {
+    "build-prod": "vite build"
+  },
+  "keywords": [
+    "reactive-react",
+    "signals",
+    "keyed"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@rrjs/signals": "file:../../../packages/signals",
+    "@rrjs/renderer": "file:../../../packages/renderer",
+    "@rrjs/react-compat": "file:../../../packages/react-compat"
+  },
+  "devDependencies": {
+    "@rrjs/babel-plugin": "file:../../../packages/babel-plugin",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "vite": "^5.0.0",
+    "terser": "^5.0.0",
+    "typescript": "^5.0.0"
+  }
+}

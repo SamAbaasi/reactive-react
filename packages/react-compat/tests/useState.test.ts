@@ -3,6 +3,23 @@ import { createInstance, withInstance } from '../src/instance'
 import { useState } from '../src/hooks/useState'
 
 describe('useState', () => {
+  it('stores a function returned by an updater without calling it', () => {
+    const initial = vi.fn(() => 'initial')
+    const replacement = vi.fn(() => 'replacement')
+    const instance = createInstance()
+    withInstance(instance, () => {
+      const [value, setValue] = useState(() => initial)
+      const update = vi.fn(previous => {
+        expect(previous).toBe(initial)
+        return replacement
+      })
+      setValue(update)
+      expect(value()).toBe(replacement)
+      expect(update).toHaveBeenCalledTimes(1)
+      expect(initial).not.toHaveBeenCalled()
+      expect(replacement).not.toHaveBeenCalled()
+    })
+  })
   it('returns a [getter, setter] tuple', () => {
     const instance = createInstance()
 

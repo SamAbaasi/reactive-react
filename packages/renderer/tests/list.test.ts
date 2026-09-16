@@ -180,20 +180,19 @@ describe('list()', () => {
     expect(second_node_after).toBe(second_node_before)
   })
 
-  it('keys must be stable for content to update — using index as key is a known footgun', () => {
-    // Documents the same warning React puts in its own docs:
-    // index-as-key reuses DOM nodes whose content was bound to the OLD item.
-    // If data changes but the key (index) stays the same, the DOM shows
-    // stale content. This is the correct behavior of a keyed reconciler;
-    // the user is responsible for choosing keys that match identity,
-    // not position.
-    const [items, setItems] = createSignal(['a', 'b'])
+  it('index-as-key still updates content — the footgun is state, not text', () => {
+    // React's index-as-key warning is about *state* landing on the wrong item:
+    // focus, uncontrolled input values, animation, component state. It is NOT
+    // about text going stale — React re-renders the reused fiber, so content
+    // updates. This test previously asserted the opposite and, in doing so,
+    // blessed the keyed-update defect as intended behaviour.
+    const [items, setItems] = createSignal([{ label: 'a' }, { label: 'b' }])
 
     function App() {
       return list(
         items,
-        (_, i) => i,  // ⚠ ANTI-PATTERN: index as key
-        (item) => h('span', null, item)
+        (_, i) => i,          // index as key: legal, but see the caveat below
+        (item) => h('span', null, () => item.label)
       )
     }
 
@@ -204,21 +203,68 @@ describe('list()', () => {
     expect(spans[0].textContent).toBe('a')
     expect(spans[1].textContent).toBe('b')
 
-    // Swap the data while keeping the same number of items.
-    // Index-as-key reuses both DOM nodes — content is STALE.
-    setItems(['x', 'y'])
+    const firstNode = spans[0]
+    setItems([{ label: 'x' }, { label: 'y' }])
 
     spans = container.querySelectorAll('span')
     expect(spans.length).toBe(2)
-    // Content did NOT update — this is the documented limitation.
-    expect(spans[0].textContent).toBe('a')
-    expect(spans[1].textContent).toBe('b')
+    expect(spans[0].textContent).toBe('x')
+    expect(spans[1].textContent).toBe('y')
+
+    // The actual footgun: node identity follows the *position*, not the item,
+    // so anything living on the node stays with position 0 rather than with 'a'.
+    expect(spans[0]).toBe(firstNode)
   })
 
-  it('using stable object identity as a key updates content correctly', () => {
-    // The correct pattern: keys match identity, not position.
-    // When an item with a given key is reused, its data hasn't changed.
-    // When data changes, the key changes too, so a new node is created.
+  it('KNOWN LIMITATION: primitive items cannot be rebound under a stable key', () => {
+    // A reused row is kept in sync by handing render() a proxy onto the row's
+    // current item. Primitives cannot be proxied, so a primitive item is passed
+    // straight through and whatever the row bound to it is frozen at first
+    // render.
+    //
+    // This only bites when the key is NOT derived from the value: keying a
+    // primitive by the primitive itself means a content change is a key change,
+    // which produces a fresh node and the correct text. Index-as-key over an
+    // array of strings is the combination that fails.
+    //
+    // React updates the text here. This is a real divergence, asserted so the
+    // suite states the truth rather than passing by accident.
+    const [items, setItems] = createSignal(['a', 'b'])
+
+    function App() {
+      return list(items, (_, i) => i, (item) => h('span', null, () => item))
+    }
+
+    const container = document.createElement('div')
+    mount(App, container)
+    setItems(['x', 'y'])
+
+    const spans = container.querySelectorAll('span')
+    expect(spans[0].textContent).toBe('a')   // React would say 'x'
+    expect(spans[1].textContent).toBe('b')   // React would say 'y'
+  })
+
+  it('primitive items keyed by value do update, because the key changes too', () => {
+    const [items, setItems] = createSignal(['a', 'b'])
+
+    function App() {
+      return list(items, (item) => item, (item) => h('span', null, () => item))
+    }
+
+    const container = document.createElement('div')
+    mount(App, container)
+    setItems(['x', 'y'])
+
+    const spans = container.querySelectorAll('span')
+    expect(spans[0].textContent).toBe('x')
+    expect(spans[1].textContent).toBe('y')
+  })
+
+  it('a stable identity key updates content while keeping the node', () => {
+    // The case the previous version of this test never exercised: same key,
+    // different content. It changed the ids and the labels together, so every
+    // key was new and every node was rebuilt — which is why a reconciler that
+    // never updated reused nodes still passed.
     const [items, setItems] = createSignal([
       { id: 1, label: 'a' },
       { id: 2, label: 'b' },
@@ -227,8 +273,8 @@ describe('list()', () => {
     function App() {
       return list(
         items,
-        (item) => item.id,  // ✓ stable identity-based key
-        (item) => h('span', null, item.label)
+        (item) => item.id,
+        (item) => h('span', null, () => item.label)
       )
     }
 
@@ -237,18 +283,29 @@ describe('list()', () => {
 
     let spans = container.querySelectorAll('span')
     expect(spans[0].textContent).toBe('a')
-    expect(spans[1].textContent).toBe('b')
+    const nodeForId1 = spans[0]
 
-    // New items with new ids — new DOM nodes are created with fresh content
+    // Same ids, new labels — the reconciler must update in place.
     setItems([
-      { id: 3, label: 'x' },
-      { id: 4, label: 'y' },
+      { id: 1, label: 'x' },
+      { id: 2, label: 'y' },
     ])
 
     spans = container.querySelectorAll('span')
     expect(spans.length).toBe(2)
     expect(spans[0].textContent).toBe('x')
     expect(spans[1].textContent).toBe('y')
+    expect(spans[0]).toBe(nodeForId1)
+
+    // New ids — fresh nodes, fresh content.
+    setItems([
+      { id: 3, label: 'p' },
+      { id: 4, label: 'q' },
+    ])
+    spans = container.querySelectorAll('span')
+    expect(spans[0].textContent).toBe('p')
+    expect(spans[1].textContent).toBe('q')
+    expect(spans[0]).not.toBe(nodeForId1)
   })
 
   it('mounts inside a parent element with other siblings', () => {

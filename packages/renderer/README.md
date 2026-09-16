@@ -37,6 +37,12 @@ Hyperscript. Creates a DOM element.
 
 Functions passed as children are treated as reactive bindings. They run inside an `effect`, so any signals they read are tracked, and only that text node updates when those signals change.
 
+Compiler-generated SVG elements carry an internal namespace marker. `h()` uses
+that marker to call `createElementNS`, keeps `foreignObject` descendants in HTML,
+and handles the tested `className`, `strokeWidth` and `xlinkHref` aliases. Author
+JSX through `@rrjs/babel-plugin`; the marker is internal and is not a DOM
+attribute or a supported hand-written API.
+
 ### `mount(component, container)`
 
 Mounts a component into a DOM container.

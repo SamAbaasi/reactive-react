@@ -1,0 +1,24 @@
+{
+  "name": "rrjs-oracle",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Differential tester: identical operation sequences against React 19 and @rrjs/renderer, diffing the resulting DOM.",
+  "scripts": {
+    "build:rrjs": "node src/build.mjs",
+    "oracle": "npm run build:rrjs && node src/run.mjs",
+    "test": "npm run build:rrjs && node src/run.mjs"
+  },
+  "dependencies": {
+    "@rrjs/babel-plugin": "file:../../packages/babel-plugin",
+    "@rrjs/react-compat": "file:../../packages/react-compat",
+    "@rrjs/renderer": "file:../../packages/renderer",
+    "@rrjs/signals": "file:../../packages/signals"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^24.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  }
+}

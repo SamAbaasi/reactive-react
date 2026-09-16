@@ -1,0 +1,41 @@
+{
+  "note": "Seeds that have ever produced a divergence. This set must always pass.",
+  "seeds": [
+    {
+      "seed": 854979275,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"toggleFlag\""
+    },
+    {
+      "seed": 3897794051,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"toggleFlag\""
+    },
+    {
+      "seed": 1244141019,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"toggleFlag\""
+    },
+    {
+      "seed": 635474759,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"toggleFlag\""
+    },
+    {
+      "seed": 2277058916,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"changeContentAndMove\""
+    },
+    {
+      "seed": 1634836632,
+      "length": 25,
+      "items": 10,
+      "note": "auto-promoted: diverged after \"changeContentAndMove\""
+    }
+  ]
+}

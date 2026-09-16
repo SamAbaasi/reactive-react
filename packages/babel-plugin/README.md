@@ -39,14 +39,65 @@ export default defineConfig({
 })
 ```
 
-In your entry file:
+### Strict run-once module contracts
 
-```js
-import { h } from '@rrjs/renderer'
-;(globalThis as any).h = h
+`runOnce: true` compiles the checked compatibility subset without re-running a
+component body or using keyed reconciliation. Imported hooks and components need
+an explicit build-tool contract. Define one manifest for the source root and
+resolve every transformed module by its exact path:
+
+```ts
+import reactiveReact, {
+  defineModuleContracts,
+  resolveModuleMetadata,
+} from '@rrjs/babel-plugin'
+
+const contracts = defineModuleContracts({
+  root: '/absolute/project/src',
+  modules: {
+    'App.tsx': {
+      imports: {
+        './theme': { hooks: ['useTheme'] },
+        './Rows': {
+          components: {
+            Rows: {
+              props: ['rows'],
+              operationKeys: { rows: 'id' },
+            },
+          },
+        },
+      },
+    },
+    'Rows.tsx': {
+      operationProps: ['rows'],
+      operationKeyProps: { rows: 'id' },
+    },
+  },
+})
+
+const options = {
+  runOnce: true,
+  moduleMetadata: resolveModuleMetadata(contracts, filename),
+}
 ```
 
-The plugin assumes `h` is in scope where JSX is used.
+Import contracts use the source string and exported name, so named aliases keep
+the same identity. Manifest module keys must be normalized, root-relative paths;
+unknown paths fail explicitly. These contracts are manually asserted facts. The
+compiler does not inspect an imported implementation or infer arbitrary module
+graphs. Operation props require a direct item-property JSX key, and accepted map
+updates must preserve that key. Opaque list replacements remain unsupported.
+
+In your application's entry file:
+
+```js
+import { mount } from '@rrjs/renderer'
+import { App } from './App'
+
+mount(App, document.getElementById('app'))
+```
+
+The plugin injects `import { h, list } from '@rrjs/renderer'` into every file that actually emits those calls. You do not assign `globalThis.h`. `@rrjs/renderer` must be installed in the app — it is a peer dependency of the plugin.
 
 ## What it transforms
 
@@ -60,6 +111,15 @@ The plugin assumes `h` is in scope where JSX is used.
 | `<Counter />` | `h(Counter, null)` |
 
 Static literals are not wrapped. Event handlers (anything matching `on[A-Z]`) are passed through directly.
+
+### SVG namespace boundary
+
+Intrinsic SVG descendants in one compiled JSX tree are marked so the renderer
+creates them in the SVG namespace; children of `foreignObject` return to HTML.
+The tested aliases are `className`, `strokeWidth` and `xlinkHref`. An SVG-only
+intrinsic without a visible `svg` ancestor and a component child directly under
+SVG are rejected because cross-component namespace context is not implemented.
+Namespaced JSX and the broader SVG attribute surface are outside this contract.
 
 ## Why thunks
 

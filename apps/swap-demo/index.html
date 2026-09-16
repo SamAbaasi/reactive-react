@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>swap_rows — React 19 vs Reactive React</title>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Swap rows 2 and 999 <span class="sub">1,000-row table &middot; identical data, markup and CSS</span></h1>
+
+    <div class="controls">
+      <button id="swap-both" class="primary">Swap rows 2 and 999</button>
+      <button id="run-many">Run 15&times; (median)</button>
+      <button id="calibrate">CPU calibration</button>
+      <button id="compare-structure">Compare DOM</button>
+      <button id="compare-layout">Compare layout</button>
+    </div>
+
+    <p id="status" class="status">loading&hellip;</p>
+
+    <p class="conditions">
+      <strong>Conditions:</strong> this page cannot throttle its own CPU.
+      Open DevTools &rarr; Performance &rarr; CPU and select <strong>4&times; slowdown</strong>
+      to match the documented benchmark methodology, then use the CPU calibration
+      button to confirm the factor actually in effect.
+      <span id="cpu-reading" class="cpu">not measured</span>
+    </p>
+  </header>
+
+  <main class="panes">
+    <section class="pane pane--react">
+      <div class="pane-head">
+        <h2>React 19.2.0</h2>
+        <div class="readout">
+          <div class="metric metric--big">
+            <span class="value" id="react-last">—</span><span class="unit">ms</span>
+            <span class="label">last swap</span>
+          </div>
+          <div class="metric">
+            <span class="value" id="react-median">—</span><span class="unit">ms</span>
+            <span class="label">median of <span id="react-runs">0</span></span>
+          </div>
+        </div>
+        <div class="spread" id="react-spread">—</div>
+        <div class="split" id="react-split">—</div>
+      </div>
+      <div class="scroller"><div id="react-mount"></div></div>
+    </section>
+
+    <section class="pane pane--rrjs">
+      <div class="pane-head">
+        <h2>Reactive React</h2>
+        <div class="readout">
+          <div class="metric metric--big">
+            <span class="value" id="rrjs-last">—</span><span class="unit">ms</span>
+            <span class="label">last swap</span>
+          </div>
+          <div class="metric">
+            <span class="value" id="rrjs-median">—</span><span class="unit">ms</span>
+            <span class="label">median of <span id="rrjs-runs">0</span></span>
+          </div>
+        </div>
+        <div class="spread" id="rrjs-spread">—</div>
+        <div class="split" id="rrjs-split">—</div>
+      </div>
+      <div class="scroller"><div id="rrjs-mount"></div></div>
+    </section>
+  </main>
+
+  <section id="compare-out" class="compare" hidden></section>
+
+  <footer class="footnote">
+    Measured: total interaction latency — from the swap call until the first task
+    after a frame in which the DOM actually shows the swap, confirmed by reading
+    the DOM back. Frame-granular. The script/paint split is shown only when the
+    browser itself reports a Long Animation Frame; work that fits in a short frame
+    produces no entry, and no split is invented for it.
+    Panes are swapped one after the other, never at the same time — they share a
+    main thread.
+  </footer>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

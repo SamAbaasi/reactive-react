@@ -1,11 +1,15 @@
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+import { emitRuntimeEvent } from '@rrjs/signals'
+
 export interface ComponentInstance {
+  /** Diagnostic identity of the mounted component; never used for behavior. */
+  displayName?: string
   // Hook storage — one slot per hook call in this component
   hooks: any[]
   // Resets to 0 before every fn() call, increments per hook
   hookIndex: number
-  // Effect queues — separate because timing differs (Section 6 of Stage 1 doc)
+  // Effect queues — separate because timing differs
   layoutEffects: EffectEntry[]
   passiveEffects: EffectEntry[]
   // Cleanup on unmount
@@ -40,14 +44,17 @@ export function setCurrentInstance(instance: ComponentInstance | null): void {
 
 // ─── Create a new component instance ────────────────────────────────────────
 
-export function createInstance(): ComponentInstance {
-  return {
+export function createInstance(displayName?: string): ComponentInstance {
+  const instance: ComponentInstance = {
+    displayName,
     hooks: [],
     hookIndex: 0,
     layoutEffects: [],
     passiveEffects: [],
     cleanup: [],
   }
+  emitRuntimeEvent('component-create', instance)
+  return instance
 }
 
 // ─── Render lifecycle ───────────────────────────────────────────────────────
@@ -64,9 +71,11 @@ export function withInstance<T>(
   setCurrentInstance(instance)
   instance.hookIndex = 0
   try {
+    emitRuntimeEvent('component-enter', instance)
     return fn()
   } finally {
     setCurrentInstance(prev)
+    emitRuntimeEvent('component-leave', instance)
   }
 }
 

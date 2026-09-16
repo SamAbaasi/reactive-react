@@ -1,4 +1,4 @@
-import { getCurrentInstance, EffectEntry } from '../instance'
+import { getCurrentInstance, EffectEntry } from '../instance.js'
 
 // ─── useTransition ───────────────────────────────────────────────────────────
 // In React, useTransition marks a state update as lower-priority. The renderer

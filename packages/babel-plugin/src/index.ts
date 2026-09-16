@@ -1,11 +1,142 @@
-import type { PluginObj, PluginPass } from '@babel/core'
+import type { NodePath, PluginObj, PluginPass } from '@babel/core'
 import * as t from '@babel/types'
 import jsxSyntaxPlugin from '@babel/plugin-syntax-jsx'
+import { addNamed } from '@babel/helper-module-imports'
+import { compileRunOnce } from './run-once.js'
+import type { ModuleMetadata } from './module-contracts.js'
+
+type IntrinsicNamespace = 'html' | 'svg'
+const SVG_ONLY_INTRINSICS = new Set([
+  'animate', 'animateMotion', 'animateTransform', 'circle', 'clipPath', 'defs',
+  'desc', 'ellipse', 'feBlend', 'feColorMatrix', 'feComponentTransfer',
+  'feComposite', 'feConvolveMatrix', 'feDiffuseLighting', 'feDisplacementMap',
+  'feDistantLight', 'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG',
+  'feFuncR', 'feGaussianBlur', 'feImage', 'feMerge', 'feMergeNode',
+  'feMorphology', 'feOffset', 'fePointLight', 'feSpecularLighting', 'feSpotLight',
+  'feTile', 'feTurbulence', 'filter', 'foreignObject', 'g', 'image', 'line',
+  'linearGradient', 'marker', 'mask', 'metadata', 'mpath', 'path', 'pattern',
+  'polygon', 'polyline', 'radialGradient', 'rect', 'stop', 'switch', 'symbol',
+  'text', 'textPath', 'tspan', 'use', 'view',
+])
+
+function annotateIntrinsicNamespaces(program: NodePath<t.Program>): void {
+  program.traverse({
+    JSXElement(path) {
+      const opening = path.node.openingElement
+      if (!t.isJSXIdentifier(opening.name)) return
+      const name = opening.name.name
+      const parent = path.findParent(parent => parent.isJSXElement()) as NodePath<t.JSXElement> | null
+      const inherited = (parent?.node.openingElement.extra as any)?.rrjsChildNamespace as IntrinsicNamespace | undefined
+      if (/^[A-Z]/.test(name)) {
+        if (inherited === 'svg') {
+          throw path.buildCodeFrameError('SVG component children require cross-component namespace compilation')
+        }
+        return
+      }
+      const namespace: IntrinsicNamespace = name === 'svg' ? 'svg' : inherited ?? 'html'
+      if (namespace === 'html' && SVG_ONLY_INTRINSICS.has(name)) {
+        throw path.buildCodeFrameError(`SVG intrinsic <${name}> requires an <svg> ancestor in the same compiled module`)
+      }
+      opening.extra = {
+        ...(opening.extra ?? {}),
+        rrjsNamespace: namespace,
+        rrjsChildNamespace: namespace === 'svg' && name === 'foreignObject' ? 'html' : namespace,
+      }
+    },
+  })
+}
+
+function rewriteRunOnceReactDomImports(program: NodePath<t.Program>, importSource: string): void {
+  for (const statement of program.get('body')) {
+    if (!statement.isImportDeclaration() || statement.node.source.value !== 'react-dom') continue
+    for (const specifier of statement.get('specifiers')) {
+      if (!specifier.isImportSpecifier()) {
+        throw specifier.buildCodeFrameError('Strict portal compilation requires a named createPortal import from react-dom')
+      }
+      const imported = specifier.node.imported
+      const name = t.isIdentifier(imported) ? imported.name : imported.value
+      if (name !== 'createPortal') {
+        throw specifier.buildCodeFrameError(`Unsupported react-dom import ${name}; only named createPortal is supported`)
+      }
+    }
+    statement.node.source = t.stringLiteral(importSource)
+  }
+}
+
+export {
+  defineModuleContracts,
+  resolveModuleMetadata,
+} from './module-contracts.js'
+export type {
+  ImportedComponentContract,
+  ImportedModuleContract,
+  ModuleContractManifest,
+  ModuleMetadata,
+} from './module-contracts.js'
 
 // ─── The Plugin ──────────────────────────────────────────────────────────────
 // Transforms JSX into h() calls.
 // Dynamic expressions (signals, computeds, variables that may change)
 // are wrapped in thunks so the renderer can subscribe them to signal changes.
+//
+// By default the plugin injects `import { h, list } from '@rrjs/renderer'`
+// into any file that actually emitted those identifiers — the same job
+// `@babel/plugin-transform-react-jsx` does under `runtime: 'automatic'`.
+// Without that injection, every component file throws `h is not defined`
+// (D16). `injectImports: false` is the classic runtime, for eval harnesses
+// that already bind `h`/`list` as parameters.
+
+export type PluginOptions = {
+  /** Compile the checked React-source subset without component re-execution or list reconciliation. */
+  runOnce?: boolean
+  /** Module to import `h` and `list` from. Default: `@rrjs/renderer`. */
+  importSource?: string
+  /**
+   * When false, assume `h`/`list` are already in scope. Used by the audit
+   * harness, which evals compiled output with `new Function('h', 'list', ...)`.
+   * Default: true.
+   */
+  injectImports?: boolean
+  /** Explicit module-graph facts supplied by an integrating build tool. */
+  moduleMetadata?: ModuleMetadata
+}
+
+type Runtime = {
+  h: () => t.Identifier
+  list: () => t.Identifier
+}
+
+function makeRuntime(path: NodePath, state: PluginPass): Runtime {
+  const opts = (state.opts ?? {}) as PluginOptions
+  const inject = opts.injectImports !== false
+  const source = opts.importSource ?? '@rrjs/renderer'
+
+  if (!inject) {
+    return {
+      h: () => t.identifier('h'),
+      list: () => t.identifier('list'),
+    }
+  }
+
+  return {
+    h: () => {
+      let id = state.get('rrjs.h') as t.Identifier | undefined
+      if (!id) {
+        id = addNamed(path, 'h', source)
+        state.set('rrjs.h', id)
+      }
+      return t.cloneNode(id)
+    },
+    list: () => {
+      let id = state.get('rrjs.list') as t.Identifier | undefined
+      if (!id) {
+        id = addNamed(path, 'list', source)
+        state.set('rrjs.list', id)
+      }
+      return t.cloneNode(id)
+    },
+  }
+}
 
 export default function reactiveReactPlugin(): PluginObj<PluginPass> {
   return {
@@ -13,15 +144,42 @@ export default function reactiveReactPlugin(): PluginObj<PluginPass> {
     inherits: (jsxSyntaxPlugin as any).default ?? jsxSyntaxPlugin,
 
     visitor: {
-      JSXElement(path) {
-        const replacement = transformElement(path.node)
-        path.replaceWith(replacement)
+      Program(path, state) {
+        const opts = state.opts as PluginOptions
+        annotateIntrinsicNamespaces(path)
+        if (!opts?.runOnce) return
+        rewriteRunOnceReactDomImports(path, opts.importSource ?? '@rrjs/renderer')
+        let helper: t.Identifier | undefined
+        let selector: t.Identifier | undefined
+        compileRunOnce(path, () => {
+          if (opts.injectImports === false) return t.identifier('derive')
+          helper ??= addNamed(path, 'derive', '@rrjs/react-compat')
+          return t.cloneNode(helper)
+        }, () => {
+          if (opts.injectImports === false) return t.identifier('choose')
+          selector ??= addNamed(path, 'choose', opts.importSource ?? '@rrjs/renderer')
+          return t.cloneNode(selector)
+        }, (name) => {
+          if (opts.injectImports === false) return t.identifier(name)
+          const key = `rrjs.${name}`
+          let id = state.get(key) as t.Identifier | undefined
+          if (!id) {
+            id = addNamed(path, name, opts.importSource ?? '@rrjs/renderer')
+            state.set(key, id)
+          }
+          return t.cloneNode(id)
+        }, opts.moduleMetadata)
+      },
+      JSXElement(path, state) {
+        const rt = makeRuntime(path, state)
+        path.replaceWith(transformElement(path.node, rt))
       },
 
-      JSXFragment(path) {
+      JSXFragment(path, state) {
         // Fragments: <>...</> → [child, child, ...]
         // We use an array because there's no h() call for fragments yet
-        const children = filterChildren(path.node.children).map(transformChild)
+        const rt = makeRuntime(path, state)
+        const children = filterChildren(path.node.children).map(c => transformChild(c, rt))
         path.replaceWith(t.arrayExpression(children))
       },
     },
@@ -70,14 +228,19 @@ function getAttributeName(name: t.JSXIdentifier | t.JSXNamespacedName): string {
   throw new Error('Namespaced JSX attributes not supported')
 }
 
-function transformElement(element: t.JSXElement): t.CallExpression {
+function transformElement(element: t.JSXElement, rt: Runtime): t.CallExpression {
   const openingElement = element.openingElement
   const tag = transformTag(openingElement.name)
   const isNativeElement = t.isStringLiteral(tag)
-  const props = transformProps(openingElement.attributes, isNativeElement)
-  const children = filterChildren(element.children).map(transformChild)
+  let props = transformProps(openingElement.attributes, isNativeElement)
+  if (isNativeElement && (openingElement.extra as any)?.rrjsNamespace === 'svg') {
+    const marker = t.objectProperty(t.stringLiteral('__rrjsNamespace'), t.stringLiteral('svg'))
+    if (t.isObjectExpression(props)) props.properties.unshift(marker)
+    else props = t.objectExpression([marker])
+  }
+  const children = filterChildren(element.children).map(c => transformChild(c, rt))
 
-  return t.callExpression(t.identifier('h'), [
+  return t.callExpression(rt.h(), [
     tag,
     props,
     ...children,
@@ -165,7 +328,8 @@ function transformAttributeValue(
 // ─── Transform a child of a JSX element ──────────────────────────────────────
 
 function transformChild(
-  child: t.JSXText | t.JSXExpressionContainer | t.JSXSpreadChild | t.JSXElement | t.JSXFragment
+  child: t.JSXText | t.JSXExpressionContainer | t.JSXSpreadChild | t.JSXElement | t.JSXFragment,
+  rt: Runtime
 ): t.Expression {
   if (t.isJSXText(child)) {
     return t.stringLiteral(child.value)
@@ -173,6 +337,8 @@ function transformChild(
 
   if (t.isJSXExpressionContainer(child)) {
     const expr = child.expression
+
+    if (expr.extra?.rrjsRegion) return expr as t.Expression
 
     if (t.isJSXEmptyExpression(expr)) {
       return t.nullLiteral()
@@ -182,25 +348,26 @@ function transformChild(
       return expr
     }
 
+    // The strict run-once pass marks maps whose source membership is a fixed
+    // source array. Execute ordinary Array#map once instead of importing the
+    // keyed reconciler used by the plugin's general mode.
+    if (expr.extra?.rrjsStaticMap) return wrapInThunk(expr as t.Expression)
+
     // Try the list-as-JSX transform first.
     // If the expression matches items.map((item) => <X key={...} />),
     // rewrite it to a list() call for keyed reconciliation.
-    const listCall = tryTransformMapToList(expr)
+    const listCall = tryTransformMapToList(expr, rt)
     if (listCall) return listCall
 
-    // Call expressions (like h(...) or list(...)) return Nodes directly
-    // and must NOT be wrapped in a thunk.
-    if (t.isCallExpression(expr)) {
-      return expr
-    }
-
+    // Calls may read signals, including through helpers. Evaluate them inside
+    // the child's reactive binding just like other dynamic expressions.
     return wrapInThunk(expr)
   }
 
   if (t.isJSXElement(child) || t.isJSXFragment(child)) {
     return t.isJSXElement(child)
-      ? transformElement(child)
-      : t.arrayExpression(filterChildren(child.children).map(transformChild))
+      ? transformElement(child, rt)
+      : t.arrayExpression(filterChildren(child.children).map(c => transformChild(c, rt)))
   }
 
   if (t.isJSXSpreadChild(child)) {
@@ -222,19 +389,22 @@ function wrapInThunk(expr: t.Expression): t.ArrowFunctionExpression {
 // This wires standard JSX iteration into the keyed list reconciler
 // without requiring developers to call list() directly.
 
-function tryTransformMapToList(expr: t.Expression): t.CallExpression | null {
+function tryTransformMapToList(expr: t.Expression, rt: Runtime): t.CallExpression | null {
   // Must be a method call to .map
   if (!t.isCallExpression(expr)) return null
   if (!t.isMemberExpression(expr.callee)) return null
-  if (!t.isIdentifier(expr.callee.property, { name: 'map' })) return null
+  if (expr.callee.computed || !t.isIdentifier(expr.callee.property, { name: 'map' })) return null
 
   // Must have a single callback argument
   if (expr.arguments.length !== 1) return null
   const callback = expr.arguments[0]
-  if (!t.isArrowFunctionExpression(callback) && !t.isFunctionExpression(callback)) return null
+  // Function expressions can depend on their own `this` or `arguments`.
+  // Preserve their ordinary map execution until those semantics are modeled.
+  if (!t.isArrowFunctionExpression(callback) || callback.async) return null
 
-  // Callback should have at least one parameter (the item)
-  if (callback.params.length === 0) return null
+  // The keyed renderer currently supplies only a reactive item proxy. Keep
+  // native map evaluation for callbacks that also need an index/source array.
+  if (callback.params.length !== 1) return null
   const itemParam = callback.params[0]
   if (!t.isIdentifier(itemParam)) return null  // skip destructured params for safety
 
@@ -245,13 +415,11 @@ function tryTransformMapToList(expr: t.Expression): t.CallExpression | null {
   if (t.isJSXElement(callback.body)) {
     returnedJsx = callback.body
   } else if (t.isBlockStatement(callback.body)) {
-    // Find a top-level return statement
-    for (const stmt of callback.body.body) {
-      if (t.isReturnStatement(stmt) && t.isJSXElement(stmt.argument)) {
-        returnedJsx = stmt.argument
-        break
-      }
-    }
+    // Extracting only the return would discard declarations, side effects,
+    // or branches. More complex callbacks use the reactive child path.
+    if (callback.body.body.length !== 1) return null
+    const stmt = callback.body.body[0]
+    if (t.isReturnStatement(stmt) && t.isJSXElement(stmt.argument)) returnedJsx = stmt.argument
   }
 
   if (!returnedJsx) return null
@@ -273,9 +441,9 @@ function tryTransformMapToList(expr: t.Expression): t.CallExpression | null {
   //     (item) => <transformed JSX>
   //   )
   const sourceExpression = expr.callee.object as t.Expression
-  const transformedRenderJsx = transformElement(returnedJsx)
+  const transformedRenderJsx = transformElement(returnedJsx, rt)
 
-  return t.callExpression(t.identifier('list'), [
+  return t.callExpression(rt.list(), [
     // getItems: () => items
     t.arrowFunctionExpression([], sourceExpression),
     // getKey: (item) => item.id
@@ -303,11 +471,11 @@ function isStaticExpression(expr: t.Expression): boolean {
 function filterChildren(
   children: Array<t.JSXText | t.JSXExpressionContainer | t.JSXSpreadChild | t.JSXElement | t.JSXFragment>
 ): typeof children {
-  // Strip whitespace-only JSXText nodes (caused by JSX formatting)
+  // Preserve intentional inline spaces between children. Whitespace containing
+  // a line break is formatting indentation and does not produce a React child.
   return children.filter(child => {
     if (t.isJSXText(child)) {
-      // Trim and check if anything remains
-      return child.value.trim().length > 0
+      return child.value.trim().length > 0 || !/[\r\n]/.test(child.value)
     }
     return true
   })

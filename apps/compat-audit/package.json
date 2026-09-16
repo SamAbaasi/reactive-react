@@ -1,0 +1,27 @@
+{
+  "name": "rrjs-compat-audit",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Runs React source through the @rrjs pipeline and records what actually happens.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@rrjs/babel-plugin": "file:../../packages/babel-plugin",
+    "@rrjs/react-compat": "file:../../packages/react-compat",
+    "@rrjs/renderer": "file:../../packages/renderer",
+    "@rrjs/signals": "file:../../packages/signals"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^7.24.0",
+    "jsdom": "^24.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

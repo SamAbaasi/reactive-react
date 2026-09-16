@@ -1,4 +1,5 @@
-import { getCurrentInstance, EffectEntry } from '../instance'
+import { getCurrentInstance, EffectEntry, flushPassiveEffects } from '../instance.js'
+import { effect } from '@rrjs/signals'
 
 interface UseEffectHook {
   deps: ReadonlyArray<unknown> | undefined
@@ -28,9 +29,41 @@ function depsChanged(
 type EffectCleanup = void | (() => void)
 type EffectFn = () => EffectCleanup
 
-export function useEffect(fn: EffectFn, deps?: ReadonlyArray<unknown>): void {
+export function useEffect(fn: EffectFn, deps?: ReadonlyArray<unknown> | (() => ReadonlyArray<unknown>)): void {
   const instance = getCurrentInstance()
   const i = instance.hookIndex++
+
+  if (typeof deps === 'function') {
+    if (instance.hooks[i] !== undefined) throw new Error('Reactive useEffect dependencies are initialized once')
+    const hook: UseEffectHook = { deps: undefined, cleanup: null }
+    instance.hooks[i] = hook
+    let initialized = false
+    let scheduled = false
+    const stop = effect(() => {
+      const next = deps()
+      if (initialized && !depsChanged(next, hook.deps)) return
+      hook.deps = [...next]
+      if (!scheduled) {
+        scheduled = true
+        instance.passiveEffects.push({
+          cleanup: () => {
+            const cleanup = hook.cleanup
+            hook.cleanup = null
+            cleanup?.()
+          },
+          run: () => {
+            scheduled = false
+            const result = fn()
+            hook.cleanup = typeof result === 'function' ? result : null
+          },
+        })
+        if (initialized) flushPassiveEffects(instance)
+      }
+      initialized = true
+    })
+    instance.cleanup.push(stop)
+    return
+  }
 
   const existing = instance.hooks[i] as UseEffectHook | undefined
 

@@ -1,4 +1,4 @@
-import { effect, computed } from '@rrjs/signals'
+import { effect, createSignal, untrack, emitRuntimeEvent } from '@rrjs/signals'
 import {
   createInstance,
   withInstance,
@@ -6,6 +6,8 @@ import {
   flushPassiveEffects,
   pushContext,
   popContext,
+  captureContext,
+  withContextSnapshot,
   type Context,
   isForwardRef,
     type ComponentInstance,
@@ -16,13 +18,114 @@ import {
 // run that instance's cleanups when the node is removed.
 // WeakMap so removed nodes get garbage collected with their instances.
 
-const instanceByNode = new WeakMap<Node, ComponentInstance>()
+const instanceByNode = new WeakMap<Node, Set<ComponentInstance>>()
+const disposersByNode = new WeakMap<Node, Array<() => void>>()
+const mountedNodes = new WeakSet<Node>()
+const disposedInstances = new WeakSet<ComponentInstance>()
+// Construction can fail before returned nodes acquire an owner. Retain only
+// nodes with resources, until their component finishes construction.
+const constructionScopes: Set<Node>[] = []
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
+const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink'
+type PortalRecord = { target: Element | DocumentFragment; nodes: Node[]; committed: boolean }
+const portalsByAnchor = new WeakMap<Node, PortalRecord>()
+
+function trackConstruction(node: Node): void {
+  for (const scope of constructionScopes) scope.add(node)
+}
+
+function trackInstance(node: Node, instance: ComponentInstance): void {
+  trackConstruction(node)
+  const instances = instanceByNode.get(node) ?? new Set<ComponentInstance>()
+  instances.add(instance)
+  instanceByNode.set(node, instances)
+}
+
+function commitNode(node: Node): void {
+  mountedNodes.add(node)
+  for (const child of Array.from(node.childNodes)) commitNode(child)
+  const portal = portalsByAnchor.get(node)
+  if (portal && !portal.committed) {
+    portal.committed = true
+    for (const child of portal.nodes) portal.target.appendChild(child)
+    for (const child of portal.nodes) commitNode(child)
+  }
+  const instances = instanceByNode.get(node)
+  if (instances) {
+    untrack(() => {
+      for (const instance of instances) {
+        flushLayoutEffects(instance)
+        if (instance.passiveEffects.length) flushPassiveEffects(instance)
+      }
+    })
+  }
+}
+
+function ownBinding(node: Node, dispose: () => void): void {
+  trackConstruction(node)
+  const disposers = disposersByNode.get(node) ?? []
+  disposers.push(dispose)
+  disposersByNode.set(node, disposers)
+}
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type Child = string | number | null | undefined | boolean | (() => any) | Node | any[]
 type Props = Record<string, any> | null
 
 type ComponentFn = (props: any) => any
+
+/**
+ * Render preconstructed children into an external DOM container while retaining
+ * their lifetime under the component tree containing the returned anchor.
+ */
+export function createPortal(
+  children: Child,
+  container: Element | DocumentFragment,
+  key?: null,
+): Node {
+  if (!(container instanceof Element) && !(container instanceof DocumentFragment)) {
+    throw new TypeError('createPortal target must be an Element or DocumentFragment')
+  }
+  if (key !== undefined && key !== null) {
+    throw new Error('createPortal keys are not supported by the strict target')
+  }
+  const normalized = normalizeReturn(children)
+  const nodes = Array.isArray(normalized) ? normalized : [normalized]
+  const anchor = document.createTextNode('')
+  const record: PortalRecord = { target: container, nodes, committed: false }
+  portalsByAnchor.set(anchor, record)
+  ownBinding(anchor, () => {
+    portalsByAnchor.delete(anchor)
+    const owned = record.nodes.splice(0)
+    finishTeardowns(owned.map(node => () => unmountNode(node)))
+  })
+  return anchor
+}
+
+/** Compiler-owned branch selection; no element-tree or keyed-row matching. */
+export function choose(
+  test: () => unknown,
+  yes: (condition: () => unknown) => any,
+  no: (condition: () => unknown) => any,
+): () => any {
+  const context = captureContext()
+  let initialized = false
+  let selected = false
+  let condition: unknown
+  let value: any
+  const readCondition = () => condition
+  return () => {
+    condition = test()
+    const next = Boolean(condition)
+    if (!initialized || selected !== next) {
+      const result = untrack(() => withContextSnapshot(context, () => (next ? yes : no)(readCondition)))
+      selected = next
+      value = result
+      initialized = true
+    }
+    return value
+  }
+}
 
 // ─── h() — hyperscript, now component-aware ─────────────────────────────────
 
@@ -31,6 +134,16 @@ export function h(
   props: Props = null,
   ...children: Child[]
 ): Node | Node[] {
+  if (typeof tag === 'function' && (tag as any)._isProvider === true) {
+    const context = (tag as any)._context as Context<unknown>
+    pushContext(context._id, props?.value)
+    try {
+      const child = children.length === 1 ? children[0] : children
+      return normalizeReturn(typeof child === 'function' ? child() : child)
+    } finally {
+      popContext(context._id)
+    }
+  }
   // ── Component function (capital-letter tag) ──
   if (typeof tag === 'function') {
     return mountComponent(tag, props, children)
@@ -55,44 +168,55 @@ export function h(
 //   3. Anything pushed onto instance.cleanup (useSyncExternalStore, etc.)
 // Then walk into children and unmount them recursively.
 
+function finishTeardowns(tasks: Array<() => void>): void {
+  const failures: unknown[] = []
+  for (const task of tasks) {
+    try { task() } catch (error) { failures.push(error) }
+  }
+  if (failures.length === 1) throw failures[0]
+  if (failures.length > 1) throw new AggregateError(failures, 'Resource cleanup failed')
+}
+
 export function unmountNode(node: Node): void {
-  // Unmount any children first (post-order traversal)
+  mountedNodes.delete(node)
+  const disposers = disposersByNode.get(node) ?? []
+  const instances = instanceByNode.get(node)
   const children = Array.from(node.childNodes)
-  for (const child of children) {
-    unmountNode(child)
-  }
-
-  // If this node belongs to a component instance, run its cleanups
-  const instance = instanceByNode.get(node)
-  if (instance) {
-    runInstanceCleanups(instance)
-    instanceByNode.delete(node)
-  }
-
-  // Detach from DOM
-  if (node.parentNode) {
-    node.parentNode.removeChild(node)
-  }
+  // Release ownership before invoking user cleanup, including reentrant cleanup.
+  disposersByNode.delete(node)
+  instanceByNode.delete(node)
+  untrack(() => finishTeardowns([
+    ...disposers,
+    ...children.map(child => () => unmountNode(child)),
+    ...Array.from(instances ?? [], instance => () => runInstanceCleanups(instance)),
+    () => { if (node.parentNode) node.parentNode.removeChild(node) },
+  ]))
 }
 
 function runInstanceCleanups(instance: ComponentInstance): void {
-  // Walk every hook slot. Hooks that scheduled effects stored their cleanup
-  // on themselves (e.g. useEffect's UseEffectHook has `cleanup`).
-  // Call any cleanup found, in reverse order so layout effects clean up
-  // after passive effects, matching the order React uses.
-  for (let i = instance.hooks.length - 1; i >= 0; i--) {
+  if (disposedInstances.has(instance)) return
+  disposedInstances.add(instance)
+  emitRuntimeEvent('component-dispose', instance)
+  // Cancel mount effects that have not yet reached their asynchronous flush.
+  instance.layoutEffects = []
+  instance.passiveEffects = []
+  const tasks: Array<() => void> = []
+  // Preserve the existing hook teardown order. Clear callbacks before invoking
+  // any of them so throwing or reentrant cleanup cannot execute them twice.
+  // React destroys effects in declaration order within one component.
+  for (let i = 0; i < instance.hooks.length; i++) {
     const hook = instance.hooks[i]
     if (hook && typeof hook.cleanup === 'function') {
-      hook.cleanup()
-      hook.cleanup = null   // prevent double-fire on a second dispose()
+      const cleanup = hook.cleanup
+      tasks.push(() => cleanup.call(hook))
+      hook.cleanup = null
     }
   }
 
   // Hook-level cleanups (useSyncExternalStore pushed an unsubscribe here)
-  for (const fn of instance.cleanup) {
-    fn()
-  }
+  tasks.push(...instance.cleanup)
   instance.cleanup = []
+  finishTeardowns(tasks)
 }
 
 // ─── Mount a component function ─────────────────────────────────────────────
@@ -102,37 +226,66 @@ function mountComponent(
   props: Props,
   children: Child[]
 ): Node | Node[] {
-  const instance = createInstance()
-  const mergedProps = { ...(props ?? {}), children }
+  const instance = createInstance(fn.displayName || fn.name || 'Anonymous')
+  const childProp = children.length === 0 ? undefined : children.length === 1 ? children[0] : children
+  const mergedProps = { ...(props ?? {}), children: childProp }
 
-  let result: any
-  if (isForwardRef(fn)) {
-    const { ref, ...rest } = mergedProps as any
-    result = withInstance(instance, () => fn._render(rest, ref ?? null))
-  } else {
-    result = withInstance(instance, () => fn(mergedProps))
+  const scope = new Set<Node>()
+  constructionScopes.push(scope)
+  try {
+    let result: any
+    if (isForwardRef(fn)) {
+      const { ref, ...rest } = mergedProps as any
+      result = withInstance(instance, () => fn._render(rest, ref ?? null))
+    } else {
+      result = withInstance(instance, () => fn(mergedProps))
+    }
+
+    const normalized = normalizeReturn(result)
+
+    // Tag the resulting node(s) with their owning instance so unmountNode
+    // can find and clean them up later.
+    if (Array.isArray(normalized)) {
+      const owner = document.createTextNode('')
+      normalized.push(owner)
+      trackInstance(owner, instance)
+    } else {
+      trackInstance(normalized, instance)
+    }
+
+    return normalized
+  } catch (error) {
+    // Preserve the construction error, while attempting every owned teardown.
+    const failures: unknown[] = []
+    untrack(() => {
+      for (const node of scope) {
+        try { unmountNode(node) } catch (cleanupError) { failures.push(cleanupError) }
+      }
+      try { runInstanceCleanups(instance) } catch (cleanupError) { failures.push(cleanupError) }
+    })
+    if (failures.length) throw new AggregateError([error, ...failures], 'Component construction and cleanup failed')
+    throw error
+  } finally {
+    constructionScopes.pop()
   }
-
-  flushLayoutEffects(instance)
-  flushPassiveEffects(instance)
-
-  const normalized = normalizeReturn(result)
-
-  // Tag the resulting node(s) with their owning instance so unmountNode
-  // can find and clean them up later.
-  if (Array.isArray(normalized)) {
-    for (const node of normalized) instanceByNode.set(node, instance)
-  } else {
-    instanceByNode.set(normalized, instance)
-  }
-
-  return normalized
 }
 
 function normalizeReturn(result: any): Node | Node[] {
+  if (typeof result === 'function') {
+    const fragment = document.createDocumentFragment()
+    appendChild(fragment, result)
+    return Array.from(fragment.childNodes)
+  }
+  if (result instanceof DocumentFragment) {
+    const nodes = Array.from(result.childNodes)
+    return nodes.length ? nodes : document.createTextNode('')
+  }
   if (result instanceof Node) return result
   if (Array.isArray(result)) {
-    return result.flat(Infinity).filter(Boolean) as Node[]
+    const nodes = result.flat(Infinity)
+      .filter(value => value != null && typeof value !== 'boolean')
+      .flatMap(value => normalizeReturn(value))
+    return nodes.length ? nodes : document.createTextNode('')
   }
   if (typeof result === 'string' || typeof result === 'number') {
     return document.createTextNode(String(result))
@@ -142,8 +295,11 @@ function normalizeReturn(result: any): Node | Node[] {
 
 // ─── Native HTML element ────────────────────────────────────────────────────
 
-function createElement(tag: string, props: Props, children: Child[]): HTMLElement {
-  const el = document.createElement(tag)
+function createElement(tag: string, props: Props, children: Child[]): Element {
+  const el = props?.__rrjsNamespace === 'svg'
+    ? document.createElementNS(SVG_NAMESPACE, tag)
+    : document.createElement(tag)
+  const afterChildren: Array<() => void> = []
 
   // ── Props ──
   if (props) {
@@ -151,38 +307,51 @@ function createElement(tag: string, props: Props, children: Child[]): HTMLElemen
       const value = props[key]
 
       if (key === 'children') continue
+      if (key === '__rrjsNamespace') continue
+
+      // `key` is reconciliation metadata, not an attribute. list() reads it from
+      // the item via getKey and never from the element, so it has no business in
+      // the DOM. React strips it for the same reason. Leaving it in cost one
+      // setAttribute per row on every keyed list.
+      if (key === 'key') continue
+
 // ref attribute: attach the DOM element to the ref object or callback ref
       if (key === 'ref') {
         if (typeof value === 'function') {
           value(el)
+          ownBinding(el, () => value(null))
         } else if (value && typeof value === 'object' && 'current' in value) {
           value.current = el
+          ownBinding(el, () => { if (value.current === el) value.current = null })
         }
         continue
       }
       if (key.startsWith('on') && typeof value === 'function') {
-        const eventName = key.slice(2).toLowerCase()
+        const inputType = tag === 'input' && typeof props.type === 'string' ? props.type.toLowerCase() : ''
+        const textChange = key === 'onChange' && (tag === 'textarea'
+          || (tag === 'input' && inputType !== 'checkbox' && inputType !== 'radio' && inputType !== 'file'))
+        const eventName = key === 'onDoubleClick' ? 'dblclick'
+          : textChange ? 'input' : key.slice(2).toLowerCase()
         el.addEventListener(eventName, value)
+        ownBinding(el, () => el.removeEventListener(eventName, value))
         continue
       }
 
 if (typeof value === 'function') {
-  // Wrap the thunk in a computed so its same-value bailout prevents
-  // downstream DOM writes when the resolved value didn't change.
-  // This is what makes per-row updates cheap when 999/1000 rows
-  // would otherwise re-run identical no-op writes.
-  const cached = computed(() => {
-    let resolved = value()
-    while (typeof resolved === 'function') resolved = resolved()
-    return resolved
-  })
-  effect(() => {
-    setAttribute(el, key, cached())
-  })
+  // The binding belongs to the element. Attribute setters avoid redundant
+  // writes without allocating an unowned intermediate computed subscription.
+  const bind = () => ownBinding(el, effect(() => {
+      let resolved = value()
+      while (typeof resolved === 'function') resolved = resolved()
+      setAttribute(el, key, resolved)
+    }))
+  if (tag === 'select' && key === 'value') afterChildren.push(bind)
+  else bind()
   continue
 }
 
-      setAttribute(el, key, value)
+      if (tag === 'select' && key === 'value') afterChildren.push(() => setAttribute(el, key, value))
+      else setAttribute(el, key, value)
     }
   }
 
@@ -190,13 +359,14 @@ if (typeof value === 'function') {
   for (const child of children) {
     appendChild(el, child)
   }
+  for (const apply of afterChildren) apply()
 
   return el
 }
 
 // ─── Append a child ─────────────────────────────────────────────────────────
 
-function appendChild(parent: HTMLElement, child: Child): void {
+function appendChild(parent: Node, child: Child): void {
   if (child === null || child === undefined || child === false || child === true) {
     return
   }
@@ -212,35 +382,74 @@ function appendChild(parent: HTMLElement, child: Child): void {
   }
 
 if (typeof child === 'function') {
-  const textNode = document.createTextNode('')
-  parent.appendChild(textNode)
+  // Keep a stable insertion point even when this region becomes empty.
+  const anchor = document.createTextNode('')
+  parent.appendChild(anchor)
+  let current: Node[] = []
 
-  const cached = computed(() => {
+  ownBinding(anchor, effect(() => {
+    const scope = new Set<Node>()
+    const next: Node[] = []
+    constructionScopes.push(scope)
+    try {
     let value = child()
     while (typeof value === 'function') value = value()
-    return value
-  })
 
-  effect(() => {
-    const value = cached()
-
-    if (value instanceof Node) {
-      if (textNode.parentNode === parent) {
-        parent.replaceChild(value, textNode)
+    const collect = (item: Child): void => {
+      if (item == null || typeof item === 'boolean') return
+      if (Array.isArray(item)) {
+        item.forEach(collect)
+      } else if (typeof item === 'function') {
+        collect(item())
+      } else if (item instanceof Node) {
+        if (item.nodeType === 11) Array.from(item.childNodes).forEach(collect)
+        else next.push(item)
       } else {
-        parent.appendChild(value)
+        const old = current[next.length]
+        const text = String(item)
+        const node = old?.nodeType === 3 ? old : document.createTextNode(text)
+        if (node.nodeValue !== text) node.nodeValue = text
+        next.push(node)
       }
-      return
     }
+    collect(value)
+    } catch (error) {
+      try { finishTeardowns([...scope].map(node => () => unmountNode(node))) }
+      catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Branch evaluation and cleanup failed') }
+      throw error
+    } finally { constructionScopes.pop() }
 
-    const next =
-      value === null || value === undefined || value === false || value === true
-        ? ''
-        : String(value)
-
-    if (textNode.nodeValue !== next) {
-      textNode.nodeValue = next
-    }
+    untrack(() => {
+      const retained = new Set(next)
+      finishTeardowns([
+        ...current.filter(node => !retained.has(node)).map(node => () => unmountNode(node)),
+        () => {
+          const destination = anchor.parentNode!
+          let cursor: Node = anchor
+          for (let i = next.length - 1; i >= 0; i--) {
+            const node = next[i]
+            if (node.nextSibling !== cursor || node.parentNode !== destination) {
+              destination.insertBefore(node, cursor)
+            }
+            cursor = node
+          }
+          current = next
+          try {
+            if (mountedNodes.has(destination)) next.forEach(commitNode)
+          } catch (error) {
+            current = []
+            try { finishTeardowns(next.map(node => () => unmountNode(node))) }
+            catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Branch commit and cleanup failed') }
+            throw error
+          }
+        },
+      ])
+    })
+  }))
+  ownBinding(anchor, () => {
+    const nodes = current
+    current = []
+    finishTeardowns(nodes.map(node => () => unmountNode(node)))
   })
   return
 }
@@ -253,7 +462,30 @@ if (typeof child === 'function') {
 
 // ─── Set an attribute ───────────────────────────────────────────────────────
 
-function setAttribute(el: HTMLElement, key: string, value: any): void {
+function setAttribute(el: Element, key: string, value: any): void {
+  if (key === 'defaultValue' && 'defaultValue' in el) {
+    ;(el as HTMLInputElement | HTMLTextAreaElement).defaultValue = value == null ? '' : String(value)
+    return
+  }
+  // Attributes describe initial form state; properties hold the live state
+  // after user interaction. Controlled bindings must update the latter.
+  if (key === 'value' && 'value' in el) {
+    const control = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    const next = value == null ? '' : String(value)
+    if (control.value !== next) control.value = next
+  }
+  if (key === 'checked' && 'checked' in el) {
+    ;(el as HTMLInputElement).checked = Boolean(value)
+  }
+  if (key === 'disabled' && 'disabled' in el) {
+    ;(el as HTMLButtonElement | HTMLInputElement | HTMLSelectElement).disabled = Boolean(value)
+    return
+  }
+  if (key === 'xlinkHref') {
+    if (value === null || value === undefined || value === false) el.removeAttributeNS(XLINK_NAMESPACE, 'href')
+    else if (el.getAttributeNS(XLINK_NAMESPACE, 'href') !== String(value)) el.setAttributeNS(XLINK_NAMESPACE, 'xlink:href', String(value))
+    return
+  }
   // Normalize incoming value to its final string-or-removed form
   const isEmpty = value === null || value === undefined || value === false
 
@@ -261,7 +493,8 @@ function setAttribute(el: HTMLElement, key: string, value: any): void {
     if (el.hasAttribute(key) || (key === 'className' || key === 'class')) {
       // Only call removeAttribute / reset className if it isn't already empty
       if (key === 'className' || key === 'class') {
-        if (el.className !== '') el.className = ''
+        if (el.namespaceURI === SVG_NAMESPACE) el.removeAttribute('class')
+        else if ((el as HTMLElement).className !== '') (el as HTMLElement).className = ''
       } else {
         el.removeAttribute(key)
       }
@@ -272,24 +505,381 @@ function setAttribute(el: HTMLElement, key: string, value: any): void {
   // className — fast path
   if (key === 'className' || key === 'class') {
     const next = String(value)
-    if (el.className !== next) {
-      el.className = next
-    }
+    if (el.namespaceURI === SVG_NAMESPACE) {
+      if (el.getAttribute('class') !== next) el.setAttribute('class', next)
+    } else if ((el as HTMLElement).className !== next) (el as HTMLElement).className = next
     return
   }
 
   // style object — Object.assign keeps it cheap; we don't deep-compare
   if (key === 'style' && typeof value === 'object') {
-    Object.assign(el.style, value)
+    Object.assign((el as HTMLElement | SVGElement).style, value)
     return
   }
 
   // Generic attribute path with bailout
+  const attributeName = el.namespaceURI === SVG_NAMESPACE && key === 'strokeWidth' ? 'stroke-width' : key
   const nextStr = String(value)
-  if (el.getAttribute(key) !== nextStr) {
-    el.setAttribute(key, nextStr)
+  if (el.getAttribute(attributeName) !== nextStr) {
+    el.setAttribute(attributeName, nextStr)
   }
 }
+type ListOperation =
+  | { kind: 'append'; previous: unknown[]; appended: unknown[]; supersedes?: unknown[] }
+  | { kind: 'prepend'; previous: unknown[]; prepended: unknown[] }
+  | { kind: 'clear'; previous: unknown[] }
+  | { kind: 'truncate'; previous: unknown[]; length: number }
+  | { kind: 'splice'; previous: unknown[]; start: number; deleteCount: number; inserted: unknown[] }
+  | { kind: 'reverse'; previous: unknown[] }
+  | { kind: 'filter'; previous: unknown[]; retained: number[] }
+  | { kind: 'sort'; previous: unknown[]; permutation: number[] }
+  | { kind: 'map'; previous: unknown[]; mapped: unknown[] }
+  | { kind: 'move'; previous: unknown[]; from: number; to: number }
+const listOperations = new WeakMap<unknown[], ListOperation>()
+const latestAppendByPrevious = new WeakMap<unknown[], unknown[]>()
+
+/** Preserve a compiler-visible append as an explicit operation on an ordinary array. */
+export function listAppend<T>(previous: T[], ...appended: T[]): T[] {
+  const next = [...previous, ...appended]
+  const supersedes = latestAppendByPrevious.get(previous)
+  listOperations.set(next, { kind: 'append', previous, appended, supersedes })
+  latestAppendByPrevious.set(previous, next)
+  return next
+}
+
+/** Preserve a compiler-visible prepend as an explicit operation. */
+export function listPrepend<T>(previous: T[], ...prepended: T[]): T[] {
+  const next = [...prepended, ...previous]
+  listOperations.set(next, { kind: 'prepend', previous, prepended })
+  return next
+}
+
+/** Preserve a compiler-visible clear as an explicit operation. */
+export function listClear<T>(previous: T[]): T[] {
+  const next: T[] = []
+  listOperations.set(next, { kind: 'clear', previous })
+  return next
+}
+
+/** Preserve a compiler-visible tail truncation as an explicit operation. */
+export function listTruncate<T>(previous: T[], length: number): T[] {
+  const bounded = Math.max(0, Math.min(previous.length, length))
+  const next = previous.slice(0, bounded)
+  listOperations.set(next, { kind: 'truncate', previous, length: bounded })
+  return next
+}
+
+/** Preserve an immutable splice as an explicit indexed operation. */
+export function listSplice<T>(previous: T[], start: number, deleteCount: number, ...inserted: T[]): T[] {
+  const integerStart = Number.isNaN(start) || start === -Infinity ? 0
+    : start === Infinity ? previous.length : Math.trunc(start)
+  const boundedStart = integerStart < 0
+    ? Math.max(previous.length + integerStart, 0)
+    : Math.min(integerStart, previous.length)
+  const integerDelete = Number.isNaN(deleteCount) || deleteCount === -Infinity ? 0
+    : deleteCount === Infinity ? previous.length - boundedStart : Math.trunc(deleteCount)
+  const boundedDelete = Math.max(0, Math.min(integerDelete, previous.length - boundedStart))
+  const next = [...previous]
+  next.splice(boundedStart, boundedDelete, ...inserted)
+  listOperations.set(next, { kind: 'splice', previous, start: boundedStart, deleteCount: boundedDelete, inserted })
+  return next
+}
+
+/** Preserve an immutable reverse as an explicit move operation. */
+export function listReverse<T>(previous: T[]): T[] {
+  const next = [...previous].reverse()
+  listOperations.set(next, { kind: 'reverse', previous })
+  return next
+}
+
+/** Preserve filter provenance as the retained indices from the previous array. */
+export function listFilter<T>(previous: T[], predicate: (item: T, index: number, source: T[]) => unknown): T[] {
+  const retained: number[] = []
+  const next: T[] = []
+  for (let index = 0; index < previous.length; index++) {
+    if (!(index in previous) || !predicate(previous[index], index, previous)) continue
+    retained.push(index)
+    next.push(previous[index])
+  }
+  listOperations.set(next, { kind: 'filter', previous, retained })
+  return next
+}
+
+/** Preserve sorting as a permutation of previous-array indices. */
+export function listSort<T>(previous: T[], comparator?: (left: T, right: T) => number): T[] {
+  const defined: number[] = []
+  const undefinedValues: number[] = []
+  for (let index = 0; index < previous.length; index++) {
+    if (previous[index] === undefined) undefinedValues.push(index)
+    else defined.push(index)
+  }
+  defined.sort((left, right) => {
+    const leftValue = previous[left] as T
+    const rightValue = previous[right] as T
+    if (comparator) return comparator(leftValue, rightValue)
+    const leftString = String(leftValue)
+    const rightString = String(rightValue)
+    return leftString < rightString ? -1 : leftString > rightString ? 1 : 0
+  })
+  const permutation = [...defined, ...undefinedValues]
+  const next = permutation.map(index => previous[index])
+  listOperations.set(next, { kind: 'sort', previous, permutation })
+  return next
+}
+
+/** Preserve a positional value update as a direct map operation. */
+export function listMap<T, U>(previous: T[], mapper: (item: T, index: number, source: T[]) => U): U[] {
+  const mapped = previous.map(mapper)
+  listOperations.set(mapped, { kind: 'map', previous, mapped })
+  return mapped
+}
+
+/** Preserve one copied-array remove/insert pair as an indexed move. */
+export function listMove<T>(previous: T[], from: number, to: number): T[] {
+  const boundedFrom = Math.max(0, Math.min(Math.trunc(from), previous.length - 1))
+  const boundedTo = Math.max(0, Math.min(Math.trunc(to), previous.length - 1))
+  const next = [...previous]
+  if (next.length) {
+    const [moved] = next.splice(boundedFrom, 1)
+    next.splice(boundedTo, 0, moved)
+  }
+  listOperations.set(next, { kind: 'move', previous, from: boundedFrom, to: boundedTo })
+  return next
+}
+
+/**
+ * A list region driven only by compiler-recorded operations. It never derives
+ * identity by comparing old and new arrays or keys.
+ */
+export function operationList<T>(getItems: () => T[], render: (item: T, index: () => number) => Node): Node {
+  const anchor = document.createComment('operations')
+  const wrapper = document.createDocumentFragment()
+  wrapper.appendChild(anchor)
+  let current: T[] | undefined
+  let nodes: Node[] = []
+  let setIndices: Array<(index: number) => void> = []
+  let setItems: Array<(item: unknown) => void> = []
+
+  const createRow = (item: T, index: number): [Node, (index: number) => void, (item: unknown) => void] => {
+    const [readIndex, setIndex] = createSignal(index)
+    const [readItem, setItem] = createSignal<unknown>(item)
+    const view = makeItemView(item, readItem) as T
+    return [untrack(() => render(view, readIndex)), setIndex, setItem]
+  }
+
+  const moveRows = (parent: Node): void => {
+    const active = document.activeElement instanceof HTMLElement
+      && nodes.some(node => node === document.activeElement || node.contains(document.activeElement))
+      ? document.activeElement : null
+    const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+      ? [active.selectionStart, active.selectionEnd, active.selectionDirection] as const : null
+    for (const node of nodes) parent.insertBefore(node, anchor)
+    if (active && document.activeElement !== active) active.focus({ preventScroll: true })
+    if (selection && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
+      active.setSelectionRange(selection[0], selection[1], selection[2] ?? undefined)
+    }
+  }
+
+  ownBinding(anchor, effect(() => {
+    const items = getItems()
+    const parent = anchor.parentNode ?? wrapper
+    if (!current) {
+      const fragment = document.createDocumentFragment()
+      const created: Node[] = []
+      try {
+        for (let index = 0; index < items.length; index++) {
+          const [node, setIndex, setItem] = createRow(items[index], index)
+          created.push(node)
+          setIndices.push(setIndex)
+          setItems.push(setItem)
+          fragment.appendChild(node)
+        }
+        parent.insertBefore(fragment, anchor)
+        nodes = created
+        current = items
+        if (mountedNodes.has(parent)) created.forEach(commitNode)
+      } catch (error) {
+        finishTeardowns(created.map(node => () => unmountNode(node)))
+        throw error
+      }
+      return
+    }
+
+    const operation = listOperations.get(items)
+    if (operation?.kind === 'append' && operation.previous !== current && operation.supersedes === current) {
+      const currentOperation = listOperations.get(current)
+      if (currentOperation?.kind === 'append' && currentOperation.previous === operation.previous) {
+        const removed = nodes.splice(nodes.length - currentOperation.appended.length)
+        setIndices.splice(setIndices.length - currentOperation.appended.length)
+        setItems.splice(setItems.length - currentOperation.appended.length)
+        current = currentOperation.previous as T[]
+        untrack(() => finishTeardowns(removed.map(node => () => unmountNode(node))))
+      }
+    }
+    if (!operation || operation.previous !== current) {
+      throw new Error('operationList: update has no direct operation provenance')
+    }
+    emitRuntimeEvent('list-operation', operation)
+    if (operation.kind === 'clear') {
+      const removed = nodes
+      nodes = []
+      setIndices = []
+      setItems = []
+      current = items
+      untrack(() => finishTeardowns(removed.map(node => () => unmountNode(node))))
+      return
+    }
+    if (operation.kind === 'truncate') {
+      const removed = nodes.splice(operation.length)
+      setIndices.splice(operation.length)
+      setItems.splice(operation.length)
+      current = items
+      untrack(() => finishTeardowns(removed.map(node => () => unmountNode(node))))
+      return
+    }
+    if (operation.kind === 'prepend') {
+      const fragment = document.createDocumentFragment()
+      const created: Node[] = []
+      const createdIndices: Array<(index: number) => void> = []
+      const createdItems: Array<(item: unknown) => void> = []
+      try {
+        for (let index = 0; index < operation.prepended.length; index++) {
+          const [node, setIndex, setItem] = createRow(operation.prepended[index] as T, index)
+          created.push(node)
+          createdIndices.push(setIndex)
+          createdItems.push(setItem)
+          fragment.appendChild(node)
+        }
+        parent.insertBefore(fragment, nodes[0] ?? anchor)
+        for (let index = 0; index < setIndices.length; index++) {
+          setIndices[index](index + created.length)
+        }
+        nodes.unshift(...created)
+        setIndices.unshift(...createdIndices)
+        setItems.unshift(...createdItems)
+        current = items
+        if (mountedNodes.has(parent)) created.forEach(commitNode)
+      } catch (error) {
+        finishTeardowns(created.map(node => () => unmountNode(node)))
+        throw error
+      }
+      return
+    }
+    if (operation.kind === 'splice') {
+      const removed = nodes.slice(operation.start, operation.start + operation.deleteCount)
+      const reference = nodes[operation.start + operation.deleteCount] ?? anchor
+      const fragment = document.createDocumentFragment()
+      const created: Node[] = []
+      const createdIndices: Array<(index: number) => void> = []
+      const createdItems: Array<(item: unknown) => void> = []
+      try {
+        for (let offset = 0; offset < operation.inserted.length; offset++) {
+          const [node, setIndex, setItem] = createRow(operation.inserted[offset] as T, operation.start + offset)
+          created.push(node)
+          createdIndices.push(setIndex)
+          createdItems.push(setItem)
+          fragment.appendChild(node)
+        }
+        untrack(() => finishTeardowns(removed.map(node => () => unmountNode(node))))
+        parent.insertBefore(fragment, reference)
+        nodes.splice(operation.start, operation.deleteCount, ...created)
+        setIndices.splice(operation.start, operation.deleteCount, ...createdIndices)
+        setItems.splice(operation.start, operation.deleteCount, ...createdItems)
+        for (let index = operation.start + created.length; index < setIndices.length; index++) setIndices[index](index)
+        current = items
+        if (mountedNodes.has(parent)) created.forEach(commitNode)
+      } catch (error) {
+        finishTeardowns(created.map(node => () => unmountNode(node)))
+        throw error
+      }
+      return
+    }
+    if (operation.kind === 'reverse') {
+      nodes.reverse()
+      setIndices.reverse()
+      setItems.reverse()
+      moveRows(parent)
+      for (let index = 0; index < setIndices.length; index++) setIndices[index](index)
+      current = items
+      return
+    }
+    if (operation.kind === 'filter') {
+      const retained = new Set(operation.retained)
+      const removed = nodes.filter((_node, index) => !retained.has(index))
+      const nextNodes = operation.retained.map(index => nodes[index])
+      const nextIndices = operation.retained.map(index => setIndices[index])
+      const nextItems = operation.retained.map(index => setItems[index])
+      untrack(() => finishTeardowns(removed.map(node => () => unmountNode(node))))
+      nodes = nextNodes
+      setIndices = nextIndices
+      setItems = nextItems
+      for (let index = 0; index < setIndices.length; index++) setIndices[index](index)
+      current = items
+      return
+    }
+    if (operation.kind === 'sort') {
+      nodes = operation.permutation.map(index => nodes[index])
+      setIndices = operation.permutation.map(index => setIndices[index])
+      setItems = operation.permutation.map(index => setItems[index])
+      moveRows(parent)
+      for (let index = 0; index < setIndices.length; index++) setIndices[index](index)
+      current = items
+      return
+    }
+    if (operation.kind === 'map') {
+      if (operation.mapped.length !== nodes.length) throw new Error('operationList: map changed list length')
+      for (let index = 0; index < setItems.length; index++) setItems[index](operation.mapped[index])
+      current = items
+      return
+    }
+    if (operation.kind === 'move') {
+      if (nodes.length) {
+        const [node] = nodes.splice(operation.from, 1)
+        const [setIndex] = setIndices.splice(operation.from, 1)
+        const [setItem] = setItems.splice(operation.from, 1)
+        nodes.splice(operation.to, 0, node)
+        setIndices.splice(operation.to, 0, setIndex)
+        setItems.splice(operation.to, 0, setItem)
+        moveRows(parent)
+        for (let index = Math.min(operation.from, operation.to); index < setIndices.length; index++) setIndices[index](index)
+      }
+      current = items
+      return
+    }
+    const fragment = document.createDocumentFragment()
+    const created: Node[] = []
+    const createdIndices: Array<(index: number) => void> = []
+    const createdItems: Array<(item: unknown) => void> = []
+    try {
+      for (let offset = 0; offset < operation.appended.length; offset++) {
+        const [node, setIndex, setItem] = createRow(operation.appended[offset] as T, nodes.length + offset)
+        created.push(node)
+        createdIndices.push(setIndex)
+        createdItems.push(setItem)
+        fragment.appendChild(node)
+      }
+      parent.insertBefore(fragment, anchor)
+      nodes.push(...created)
+      setIndices.push(...createdIndices)
+      setItems.push(...createdItems)
+      current = items
+      if (mountedNodes.has(parent)) created.forEach(commitNode)
+    } catch (error) {
+      finishTeardowns(created.map(node => () => unmountNode(node)))
+      throw error
+    }
+  }))
+  ownBinding(anchor, () => {
+    const owned = nodes
+    nodes = []
+    setIndices = []
+    setItems = []
+    current = undefined
+    finishTeardowns(owned.map(node => () => unmountNode(node)))
+  })
+  return wrapper
+}
+
 // ─── Keyed list reconciliation ──────────────────────────────────────────────
 //
 // list(getItems, getKey, render) is the renderer's primitive for arrays.
@@ -313,6 +903,50 @@ interface ListEntry {
   key: unknown
   node: Node
   item: unknown
+  /** Publishes a new item to every binding render() created for this row. */
+  setItem: (next: unknown) => void
+  /** What render() was actually handed — a live view onto `item`. */
+  view: unknown
+}
+
+// ─── Reactive item views ────────────────────────────────────────────────────
+//
+// A key identifies *which* item, not what the item contains. Content changing
+// under a stable key is the normal case, so a reused node has to reflect the new
+// item. Re-rendering into a fresh node would fix the content but destroy node
+// identity — focus, scroll position, uncontrolled input state, in-flight CSS
+// transitions — and would cost the LIS reconciliation its whole point.
+//
+// Instead each row owns a signal holding its current item, and render() is
+// handed a proxy that reads through that signal. Every binding the row created
+// therefore subscribes to it, and publishing a new item re-runs exactly those
+// bindings and nothing else. The node itself is never touched.
+//
+// The swap case stays free: swapping moves the *same* item objects, so the
+// signal is set to the value it already holds and Object.is bailout means no
+// binding re-runs at all.
+
+function makeItemView(item: unknown, read: () => unknown): unknown {
+  // Primitives can't be proxied. In practice a primitive item is keyed by its
+  // own value, so changing it changes the key and produces a fresh node anyway.
+  if (item === null || (typeof item !== 'object' && typeof item !== 'function')) {
+    return item
+  }
+  // The target is a bare object, not `item`: proxy invariants forbid reporting a
+  // different value for a non-configurable own property of the target, and real
+  // item objects have exactly those.
+  return new Proxy({} as Record<PropertyKey, unknown>, {
+    get: (_t, prop, receiver) => Reflect.get(read() as object, prop, receiver),
+    set: (_t, prop, value) => Reflect.set(read() as object, prop, value),
+    has: (_t, prop) => Reflect.has(read() as object, prop),
+    deleteProperty: (_t, prop) => Reflect.deleteProperty(read() as object, prop),
+    ownKeys: () => Reflect.ownKeys(read() as object),
+    getPrototypeOf: () => Reflect.getPrototypeOf(read() as object),
+    getOwnPropertyDescriptor: (_t, prop) => {
+      const d = Reflect.getOwnPropertyDescriptor(read() as object, prop)
+      return d === undefined ? undefined : { ...d, configurable: true }
+    },
+  })
 }
 
 export function list<T>(
@@ -321,12 +955,24 @@ export function list<T>(
   render: (item: T, index: number) => Node
 ): Node {
   const anchor = document.createComment('list')
+  emitRuntimeEvent('reconciler-enter', anchor)
   const wrapper = document.createDocumentFragment()
   wrapper.appendChild(anchor)
 
   let entries: ListEntry[] = []
 
-  effect(() => {
+  // Build a row. render() runs untracked: the reads it performs belong to the
+  // row's own bindings, not to the list effect. Without this, creating a row
+  // would subscribe the list to that row's item signal, and updating one row
+  // would re-reconcile every row.
+  function createEntry(item: T, index: number, key: unknown): ListEntry {
+    const [readItem, setItem] = createSignal<unknown>(item)
+    const view = makeItemView(item, readItem) as T
+    const node = untrack(() => render(view, index))
+    return { key, node, item, setItem, view }
+  }
+
+  ownBinding(anchor, effect(() => {
     const items = getItems()
     const parent = anchor.parentNode ?? wrapper
 
@@ -336,12 +982,7 @@ export function list<T>(
     // a time triggers 1000 layout invalidations. Range.deleteContents() does
     // it in a single browser operation.
     if (items.length === 0) {
-      if (entries.length > 0 && entries[0].node.parentNode === parent) {
-        const range = document.createRange()
-        range.setStartBefore(entries[0].node)
-        range.setEndBefore(anchor)
-        range.deleteContents()
-      }
+      for (const entry of entries) untrack(() => unmountNode(entry.node))
       entries = []
       return
     }
@@ -357,12 +998,13 @@ export function list<T>(
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
         const key = getKey(item, i)
-        const node = render(item, i)
-        newEntries.push({ key, node, item })
-        fragment.appendChild(node)
+        const entry = createEntry(item, i, key)
+        newEntries.push(entry)
+        fragment.appendChild(entry.node)
       }
       parent.insertBefore(fragment, anchor)
       entries = newEntries
+      if (mountedNodes.has(parent)) newEntries.forEach(entry => commitNode(entry.node))
       return
     }
 
@@ -382,16 +1024,21 @@ export function list<T>(
 
       if (isPureAppend) {
         const newEntries: ListEntry[] = entries.slice()
+        for (let i = 0; i < entries.length; i++) {
+          entries[i].item = items[i]
+          entries[i].setItem(items[i])
+        }
         const fragment = document.createDocumentFragment()
         for (let i = entries.length; i < items.length; i++) {
           const item = items[i]
           const key = getKey(item, i)
-          const node = render(item, i)
-          newEntries.push({ key, node, item })
-          fragment.appendChild(node)
+          const entry = createEntry(item, i, key)
+          newEntries.push(entry)
+          fragment.appendChild(entry.node)
         }
         parent.insertBefore(fragment, anchor)
         entries = newEntries
+        if (mountedNodes.has(parent)) newEntries.forEach(entry => commitNode(entry.node))
         return
       }
     }
@@ -416,12 +1063,16 @@ export function list<T>(
       const existing = oldByKey.get(key)
 
       if (existing) {
-        newEntries.push({ key, node: existing.node, item })
+        // Same key, possibly different content. Keep the node, republish the
+        // item. Object.is bailout makes this free when the item is unchanged,
+        // which is why a pure reorder (swap) costs nothing here.
+        existing.item = item
+        existing.setItem(item)
+        newEntries.push(existing)
         usedKeys.add(key)
         newToOldIndex[i] = oldIndexByKey.get(key)!
       } else {
-        const node = render(item, i)
-        newEntries.push({ key, node, item })
+        newEntries.push(createEntry(item, i, key))
         newToOldIndex[i] = -1
       }
     }
@@ -429,9 +1080,7 @@ export function list<T>(
     // Remove dead keys.
     for (const entry of oldEntries) {
       if (!usedKeys.has(entry.key)) {
-        if (entry.node.parentNode) {
-          entry.node.parentNode.removeChild(entry.node)
-        }
+        untrack(() => unmountNode(entry.node))
       }
     }
 
@@ -456,7 +1105,8 @@ export function list<T>(
     }
 
     entries = newEntries
-  })
+    if (mountedNodes.has(parent)) newEntries.forEach(entry => commitNode(entry.node))
+  }))
 
   return wrapper
 }
@@ -519,18 +1169,19 @@ function longestIncreasingSubsequence(arr: number[]): number[] {
 
 export function mount(component: () => any, container: HTMLElement): () => void {
   const result = mountComponent(component, null, [])
-  if (Array.isArray(result)) {
-    for (const node of result) container.appendChild(node)
-  } else {
-    container.appendChild(result)
-  }
-
-  // Return an unmount function — caller can dispose the whole tree
-  return () => {
+  const dispose = () => finishTeardowns((Array.isArray(result) ? result : [result]).map(node => () => unmountNode(node)))
+  try {
     if (Array.isArray(result)) {
-      for (const node of result) unmountNode(node)
+      for (const node of result) container.appendChild(node)
     } else {
-      unmountNode(result)
+      container.appendChild(result)
     }
+    commitNode(container)
+  } catch (error) {
+    try { dispose() } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Mount commit and cleanup failed')
+    }
+    throw error
   }
+  return dispose
 }

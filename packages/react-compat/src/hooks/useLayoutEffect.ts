@@ -1,4 +1,4 @@
-import { getCurrentInstance, EffectEntry } from '../instance'
+import { getCurrentInstance, EffectEntry } from '../instance.js'
 
 interface UseLayoutEffectHook {
   deps: ReadonlyArray<unknown> | undefined

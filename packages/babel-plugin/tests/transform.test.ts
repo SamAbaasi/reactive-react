@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { transformSync } from '@babel/core'
 import plugin from '../src/index'
 
-function transform(code: string): string {
+function transform(code: string, options: Record<string, unknown> = {}): string {
   const result = transformSync(code, {
-    plugins: [plugin],
+    plugins: [[plugin, options]],
     parserOpts: { plugins: ['jsx'] },
     generatorOpts: { compact: true, retainLines: false },
   })
@@ -12,6 +12,42 @@ function transform(code: string): string {
 }
 
 describe('static content — no thunks needed', () => {
+  it('rewrites an aliased named createPortal import for the strict target', () => {
+    const out = transform(`import { createPortal as portal } from 'react-dom'; const x = portal(<div />, target)`, { runOnce: true })
+    expect(out).toMatch(/import\{createPortal as portal(?:,h as _h)?\}from"@rrjs\/renderer"/)
+  })
+
+  it('rejects default, namespace and unrelated react-dom imports in strict mode', () => {
+    expect(() => transform(`import ReactDOM from 'react-dom'`, { runOnce: true })).toThrow(/named createPortal import/)
+    expect(() => transform(`import * as ReactDOM from 'react-dom'`, { runOnce: true })).toThrow(/named createPortal import/)
+    expect(() => transform(`import { flushSync } from 'react-dom'`, { runOnce: true })).toThrow(/only named createPortal/)
+  })
+
+  it('rejects changing portal targets, portal keys and unproven target expressions', () => {
+    expect(() => transform(`function App(){ const [target] = useState(first); return createPortal(<div />, target) }`, { runOnce: true })).toThrow(/changing createPortal targets|state-dependent component control flow/)
+    expect(() => transform(`const x = createPortal(<div />, target, 'key')`, { runOnce: true })).toThrow(/createPortal keys are unsupported/)
+    expect(() => transform(`const x = createPortal(<div />, document.body)`, { runOnce: true })).toThrow(/stable identifier/)
+  })
+
+  it('does not classify a same-spelled local helper as the portal primitive', () => {
+    const out = transform(`function createPortal(value){ return value } function App(){ return flag && createPortal(<div />, target) }`, { runOnce: true })
+    expect(out).not.toContain('choose(')
+  })
+
+  it('marks SVG descendants while returning foreignObject children to HTML', () => {
+    const out = transform(`const x = <svg><g><circle /></g><foreignObject><div /></foreignObject></svg>`)
+    expect(out.match(/"__rrjsNamespace":"svg"/g)).toHaveLength(4)
+    expect(out).toContain(`h("div",null)`)
+  })
+
+  it('rejects an SVG-only intrinsic without an in-module svg ancestor', () => {
+    expect(() => transform(`const x = <circle />`)).toThrow(/SVG intrinsic.*requires an <svg> ancestor/)
+  })
+
+  it('rejects a component child whose SVG namespace cannot cross the component boundary', () => {
+    expect(() => transform(`const x = <svg><Icon /></svg>`)).toThrow(/cross-component namespace/)
+  })
+
   it('transforms a div with static text', () => {
     const out = transform(`const x = <div>hello</div>`)
     expect(out).toContain(`h("div",null,"hello")`)
@@ -116,7 +152,8 @@ it('native elements still get reactive bindings (thunks) for dynamic props', () 
 describe('nesting', () => {
   it('handles nested elements', () => {
     const out = transform(`const x = <div><span>hi</span></div>`)
-    expect(out).toContain(`h("div",null,h("span",null,"hi"))`)
+    // addNamed may bind the factory as `h` or `_h`; the nested call shape is the claim.
+    expect(out).toMatch(/h\("div",null,_?h\("span",null,"hi"\)\)/)
   })
 
   it('mixes static and dynamic children', () => {

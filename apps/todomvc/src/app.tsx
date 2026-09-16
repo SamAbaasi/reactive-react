@@ -78,6 +78,9 @@ export function App() {
   const [editingText, setEditingText] = useState<string>('')
   const newTodoRef = useRef<HTMLInputElement>(null)
 
+  // TODO: dependency updates require runtime/compiler support. This effect
+  // currently persists only at mount; changing [todos] to [todos()] alone
+  // cannot re-evaluate dependencies in a component that runs once.
   useEffect(() => {
     saveTodos(todos())
   }, [todos])

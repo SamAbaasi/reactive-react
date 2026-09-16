@@ -1,4 +1,4 @@
-import { readContext, Context } from '../context'
+import { readContext, Context } from '../context.js'
 
 // useContext does NOT need a hook slot.
 // It just reads the current value from the global stack for this context.

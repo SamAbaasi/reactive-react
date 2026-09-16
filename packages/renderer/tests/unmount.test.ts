@@ -3,7 +3,18 @@ import { h, mount, unmountNode } from '../src/index'
 import { useEffect, useState, useLayoutEffect } from '@rrjs/react-compat'
 
 function nextMacroTask(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
+  // Passive effects are queued on a MessageChannel (see react-compat/src/instance.ts).
+  // A bare setTimeout(0) is a *different* macrotask source, and neither jsdom nor the
+  // HTML spec orders port-message delivery against timer callbacks. Racing them made
+  // these tests fail ~35% of the time in a full-repo run. Posting on a channel of our
+  // own is delivered FIFO *after* the library's already-posted message, so this waits
+  // for the flush instead of gambling on it. The trailing timer also drains any
+  // timer-based work scheduled by the effect itself.
+  return new Promise(resolve => {
+    const ch = new MessageChannel()
+    ch.port1.onmessage = () => setTimeout(resolve, 0)
+    ch.port2.postMessage(null)
+  })
 }
 
 describe('unmount', () => {

@@ -1,5 +1,38 @@
 # Benchmarks
 
+> ## ⚠ Correction — these figures are being re-measured
+>
+> The numbers below are not currently reliable and are retained, marked, until a verified
+> revision replaces them.
+>
+> **`update_10th` measured a no-op.** The benchmark adapter changed a row's label while
+> keeping its id. `@rrjs/renderer`'s keyed reconciler reused the row's DOM node and never
+> delivered the new content to it, so the update never reached the DOM. The reported
+> 59 ms — and its 3.2 ms script time — is the cost of doing nothing, compared against
+> React performing the real work. The defect is fixed in the renderer; see
+> [KEYED-LISTS.md](./KEYED-LISTS.md). The figure has not yet been
+> re-measured against the corrected library.
+>
+> **The script/paint splits cannot be regenerated from anything in this repository.** The
+> only harness present is the in-page `window.bench.run()` in `apps/benchmark`, which
+> measures with a single `requestAnimationFrame`. That callback fires before paint, so
+> that harness cannot produce a script/paint split, and it measures eight tests, not the
+> nine listed here. Wherever the splits came from, it was not this repository, and they
+> are unverifiable as published.
+>
+> **Every Reactive React number carries instrumentation overhead.** `apps/benchmark`
+> overrides `Element.prototype.setAttribute`, `removeAttribute` and `className` at module
+> load for a mutation counter. The overrides are live during measurement and apply to the
+> Reactive React side only.
+>
+> **The adapter is not a conforming js-framework-benchmark entry.** It has no
+> `js-framework-benchmark` config block and is not laid out under `frameworks/keyed/`, so
+> it has not passed the harness's keyed validation.
+>
+> A verified revision is in preparation: a conforming adapter in both signal-optimised and
+> idiomatic-React forms, run on the official harness, with medians and run-to-run spread
+> reported for every figure.
+
 Reactive React's performance measured against React 19.2.0 using the official [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) Chrome harness.
 
 These numbers are **directly comparable** — both Reactive React and React 19 were run on the same hardware, in the same Chrome session, with identical 4× CPU throttling, by the same benchmark adapter pattern.
@@ -10,7 +43,7 @@ These numbers are **directly comparable** — both Reactive React and React 19 w
 
 - **Test suite**: official `js-framework-benchmark` Chrome harness with CDP-based timing
 - **CPU throttling**: 4× (standard for this benchmark)
-- **Iterations**: 15 per test, median reported
+- **Iterations**: 15 per test, median reported *(unverified — the in-page harness in this repo uses 10, and 3 for create10k)*
 - **Hardware**: Lenovo laptop, Intel CPU, Windows 11
 - **Browser**: Chrome (latest stable)
 - **React version compared**: React 19.2.0 keyed hooks adapter
@@ -18,7 +51,7 @@ These numbers are **directly comparable** — both Reactive React and React 19 w
 
 These are not comparisons against the public leaderboard's reference hardware. They are direct head-to-head comparisons on consumer hardware where both frameworks were measured with the same throttling and harness. Library users on similar consumer hardware should see comparable relative performance.
 
-The Reactive React adapter uses per-row signals for label updates — the fastest pattern the library supports. A future "idiomatic" adapter using plain immutable updates will also be published; expect those numbers to be 1.5-2× slower on `update_10th`.
+~~The Reactive React adapter uses per-row signals for label updates — the fastest pattern the library supports.~~ **Incorrect: the adapter used plain values, not per-row signals. That is why its updates never reached the DOM.** Both a signal-optimised and an idiomatic adapter are being built and will be measured separately.
 
 ---
 
@@ -28,7 +61,7 @@ The Reactive React adapter uses per-row signals for label updates — the fastes
 |------|----------------|--------------|---------|
 | Create 1,000 rows | 75 ms | 66 ms | React faster by 14% |
 | Replace 1,000 rows | 83 ms | 76 ms | React faster by 9% |
-| Update every 10th row | 59 ms | 54 ms | React faster by 9% |
+| ~~Update every 10th row~~ | ~~59 ms~~ | ~~54 ms~~ | **INVALID — measured a no-op, see correction above** |
 | Select row | **16 ms** | 20 ms | **Reactive React faster by 20%** |
 | Swap rows | **78 ms** | 419 ms | **Reactive React faster by 5.4×** ★ |
 | Remove one row | 55 ms | 39 ms | React faster by 41% |
@@ -100,6 +133,9 @@ These gaps are architectural in nature. Closing them requires either:
 
 Each test includes the median total time, plus the script/paint split. Script time is your JavaScript executing. Paint time is browser layout and rendering.
 
+**The splits below cannot be regenerated from this repository — see the correction at the
+top of this file. Treat every script/paint pair here as unverified.**
+
 ```
 01_run1k (Create 1,000 rows)
    Reactive React: total=75ms  (script=15.7  paint=59.0)
@@ -111,10 +147,12 @@ Each test includes the median total time, plus the script/paint split. Script ti
    React 19.2.0:   total=76ms  (script=25.9  paint=48.7)
    Note: Reactive React's script is 5ms faster than React. Paint is 11ms slower.
 
-03_update10th1k_x16 (Update every 10th row)
-   Reactive React: total=59ms  (script=3.2   paint=46.2)
+03_update10th1k_x16 (Update every 10th row)   *** INVALID — see correction at top ***
+   Reactive React: total=59ms  (script=3.2   paint=46.2)   <- measured a no-op
    React 19.2.0:   total=54ms  (script=10.7  paint=36.5)
-   Note: Reactive React's script is 7ms faster (per-row signals are O(100), not O(1000)).
+   Note: the original note claimed "per-row signals are O(100), not O(1000)". The adapter
+   did not use per-row signals; rows carried plain values, and the reconciler never
+   delivered changed content to a reused row, so no DOM update occurred at all.
 
 04_select1k (Select row)  ★ WIN
    Reactive React: total=16ms  (script=2.2   paint=10.8)
@@ -176,7 +214,7 @@ git clone https://github.com/krausest/js-framework-benchmark
 cd js-framework-benchmark
 
 # Add Reactive React adapter
-# (use apps/benchmark/main.jsx from this repo as the template)
+# (use apps/benchmark/src/main.tsx from this repo as the template)
 
 # Run the benchmark
 cd webdriver-ts

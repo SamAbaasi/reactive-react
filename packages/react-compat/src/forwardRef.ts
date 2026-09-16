@@ -1,4 +1,4 @@
-import type { RefObject } from './hooks/useRef'
+import type { RefObject } from './hooks/useRef.js'
 
 // A "function ref" or an object ref — both forms are supported, like React.
 export type Ref<T> = ((instance: T | null) => void) | RefObject<T> | null

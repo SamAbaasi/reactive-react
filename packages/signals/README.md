@@ -90,6 +90,26 @@ batch(() => {
 // Effects depending on a, b, c run once, not three times
 ```
 
+### `untrack(fn)`
+
+Runs `fn` with no observer current, so signal reads inside it do not subscribe the
+surrounding effect. Returns whatever `fn` returns.
+
+```js
+effect(() => {
+  console.log(a())                 // tracked — this effect re-runs when a changes
+  const snapshot = untrack(() => b())  // read once, no subscription to b
+  console.log(snapshot)
+})
+```
+
+Effects created *inside* `untrack` still track their own reads normally — only the
+observer that was current on entry is suppressed, and it is restored on exit.
+
+The renderer uses this when building keyed list rows: creating a row reads that row's
+data, and without `untrack` those reads would subscribe the *list* effect to every row, so
+touching one row would re-reconcile the whole list.
+
 ## Edge cases
 
 - **Async tracking**: signals read inside `setTimeout`, `await`, or `requestAnimationFrame` callbacks do **not** track. The observer stack is synchronous.
