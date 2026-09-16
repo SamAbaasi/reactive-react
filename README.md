@@ -68,12 +68,13 @@ Run node scripts/test-all.mjs for current package results. Test counts alone do 
 
 ---------|---------|-------|
 | [`@rrjs/signals`](./packages/signals) | Reactive primitives: `createSignal`, `effect`, `computed`, `batch` | 53 |
-| [`@rrjs/renderer`](./packages/renderer) | DOM renderer with keyed list reconciliation | 76 |
+| [`@rrjs/renderer`](./packages/renderer) | DOM renderer, direct list operations, and the reconciling `list()` used by `runOnce: false` | 76 |
 | [`@rrjs/react-compat`](./packages/react-compat) | React hooks API on top of signals | 111 |
-| [`@rrjs/babel-plugin`](./packages/babel-plugin) | JSX → `h()` transform with reactive wrapping | 44 |
+| [`@rrjs/babel-plugin`](./packages/babel-plugin) | Compiles React components to run once, with direct DOM updates | 47 |
 
-**Total: 284 package tests, 0 failing, 0 skipped.** A further 124 integration
-tests run from `apps/compat-audit` (`npm test --prefix apps/compat-audit`).
+**Total: 287 package tests, 0 failing, 0 skipped.** A further 174 integration
+tests across 18 files run from `apps/compat-audit` (`npm test --prefix apps/compat-audit`),
+and every test in both suites asserts a result.
 
 ---
 

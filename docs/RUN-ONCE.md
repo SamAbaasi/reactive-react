@@ -53,6 +53,10 @@ contains a keyed-list reconciler; the new compiler path excludes it.
   and stays live here. Both sides are asserted in
   `apps/compat-audit/tests/react-pattern-corpus.test.ts`. A block-bodied
   `useMemo`, a parameterised one, or `useReducer` are still refused.
+- `useReducer` rewrites to `useState` plus a dispatch that applies the reducer
+  through a functional updater, so React's queued ordering holds: two dispatches
+  in one handler move the state twice. The lazy third argument is supported.
+  The reducer must be a named or inline function.
 - Direct local function components support reactive/destructured props, static
   defaults, inline callbacks, one lazy child and primitive render-prop results.
   Direct local context providers/consumers, conditional context snapshots,

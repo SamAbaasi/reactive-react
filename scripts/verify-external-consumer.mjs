@@ -56,6 +56,19 @@ try {
     const packageDir = join(ROOT, 'packages', name)
     const packageJson = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
     versions[packageJson.name] = packageJson.version
+    // Installing the four tarballs together satisfies every internal import
+    // whatever the manifest says, so a workspace-only specifier survives this
+    // gate and reaches the registry. @rrjs/renderer@0.1.7 shipped with
+    // `file:../signals` and cannot be installed from npm at all. Check the
+    // declared specifier itself, before packing.
+    for (const field of ['dependencies', 'peerDependencies']) {
+      for (const [dependency, range] of Object.entries(packageJson[field] ?? {})) {
+        if (!dependency.startsWith('@rrjs/')) continue
+        if (/^(file|link|workspace):/.test(range)) {
+          throw new Error(`${packageJson.name} declares ${field}.${dependency} as "${range}"; a published package cannot resolve a workspace path`)
+        }
+      }
+    }
     run('npm', ['pack', '--silent', '--pack-destination', packDir], packageDir)
   }
   for (const file of readdirSync(packDir).filter(file => file.endsWith('.tgz')).sort()) tarballs.push(join(packDir, file))

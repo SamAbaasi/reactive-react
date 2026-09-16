@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/renderer",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "description": "Signal-driven DOM renderer with keyed list reconciliation. No VDOM.",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,8 +23,8 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@rrjs/signals": "file:../signals",
-     "@rrjs/react-compat": "file:../react-compat"
+    "@rrjs/signals": "^0.2.0",
+    "@rrjs/react-compat": "^0.2.0"
   },
   "devDependencies": {
     "vitest": "^1.0.0",
@@ -39,5 +39,11 @@
     "url": "https://github.com/SamAbaasi/reactive-react.git",
     "directory": "packages/renderer"
   },
-  "keywords": ["renderer", "dom", "signals", "fine-grained", "no-vdom"]
+  "keywords": [
+    "renderer",
+    "dom",
+    "signals",
+    "fine-grained",
+    "no-vdom"
+  ]
 }

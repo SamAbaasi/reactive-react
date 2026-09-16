@@ -1,6 +1,21 @@
 # @rrjs/babel-plugin
 
-Babel plugin that compiles JSX to `h()` calls compatible with `@rrjs/renderer`. Dynamic expressions inside JSX are wrapped in thunks so the renderer can establish reactive bindings.
+Babel plugin that compiles React components for `@rrjs/renderer`. By default each
+component body runs once per mount, state is read as an ordinary value, and DOM
+updates and list changes are applied directly with no keyed reconciliation.
+Source outside the supported subset is a build error rather than a silent
+difference.
+
+Two paths, selected with the `runOnce` option:
+
+| | default (`runOnce`) | `runOnce: false` |
+| --- | --- | --- |
+| Component source | ordinary React: `count` | adapted: state is a getter, `count()` |
+| Lists | direct insert/move/remove | reconciling `list()` |
+| Unsupported source | rejected at build time | compiled, sometimes incorrectly |
+
+Version 0.2.0 made `runOnce` the default. Builds that relied on the previous
+default must pass `runOnce: false` explicitly.
 
 ## Install
 
@@ -39,11 +54,10 @@ export default defineConfig({
 })
 ```
 
-### Strict run-once module contracts
+### Module contracts for imports
 
-`runOnce: true` compiles the checked compatibility subset without re-running a
-component body or using keyed reconciliation. Imported hooks and components need
-an explicit build-tool contract. Define one manifest for the source root and
+The default compiler handles components and hooks defined in the module it is
+compiling. Imported hooks and components need an explicit build-tool contract. Define one manifest for the source root and
 resolve every transformed module by its exact path:
 
 ```ts
@@ -76,7 +90,6 @@ const contracts = defineModuleContracts({
 })
 
 const options = {
-  runOnce: true,
   moduleMetadata: resolveModuleMetadata(contracts, filename),
 }
 ```

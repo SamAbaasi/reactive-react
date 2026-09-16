@@ -156,6 +156,68 @@ export function compileRunOnce(
     },
   })
 
+  // `useReducer` is `useState` with the update spelled as a reducer. React
+  // queues dispatches and applies them in order -- two `d(1)` calls in one
+  // handler move the count by two, not one -- so the rewrite uses the
+  // functional updater form, which has exactly that behaviour here.
+  //
+  //   const [s, d] = useReducer(reducer, init)
+  //     becomes
+  //   const [s, _set] = useState(init)
+  //   const d = action => _set(prev => reducer(prev, action))
+  //
+  // React's third argument is a lazy initialiser: the initial state is
+  // `init(arg)`. Everything downstream then sees ordinary `useState`.
+  program.traverse({
+    VariableDeclarator(path) {
+      const init = path.get('init')
+      if (!init.isCallExpression() || hookName(init) !== 'useReducer') return
+      const args = init.get('arguments')
+      if (args.length < 2 || args.length > 3) {
+        throw init.buildCodeFrameError('runOnce: useReducer takes a reducer, an initial value and an optional initialiser')
+      }
+      const reducer = args[0]
+      if (!reducer.isIdentifier() && !reducer.isArrowFunctionExpression() && !reducer.isFunctionExpression()) {
+        throw reducer.buildCodeFrameError('runOnce: useReducer requires a named or inline reducer')
+      }
+      if (!t.isArrayPattern(path.node.id) || !t.isIdentifier(path.node.id.elements[0])
+        || !t.isIdentifier(path.node.id.elements[1])) {
+        throw path.buildCodeFrameError('runOnce: useReducer requires a named state and dispatch binding')
+      }
+      const state = path.node.id.elements[0]
+      const dispatch = path.node.id.elements[1]
+      const setter = path.scope.generateUidIdentifier('set' + state.name)
+      const previous = path.scope.generateUidIdentifier('previous')
+      const action = path.scope.generateUidIdentifier('action')
+
+      const initial = args.length === 3
+        ? t.callExpression(t.cloneNode(args[2].node as t.Expression, true), [t.cloneNode(args[1].node as t.Expression, true)])
+        : t.cloneNode(args[1].node as t.Expression, true)
+
+      const updater = t.arrowFunctionExpression(
+        [t.cloneNode(previous, true)],
+        t.callExpression(t.cloneNode(reducer.node as t.Expression, true),
+          [t.cloneNode(previous, true), t.cloneNode(action, true)]),
+      )
+      const dispatchFn = t.arrowFunctionExpression(
+        [t.cloneNode(action, true)],
+        t.callExpression(t.cloneNode(setter, true), [updater]),
+      )
+
+      const declaration = path.parentPath
+      if (!declaration.isVariableDeclaration()) {
+        throw path.buildCodeFrameError('runOnce: useReducer must be a direct const declaration')
+      }
+      declaration.insertAfter(t.variableDeclaration('const', [
+        t.variableDeclarator(t.cloneNode(dispatch, true), dispatchFn),
+      ]))
+      path.node.id = t.arrayPattern([t.cloneNode(state, true), t.cloneNode(setter, true)])
+      init.node.callee = t.identifier('useState')
+      init.node.arguments = [initial]
+      path.scope.crawl()
+    },
+  })
+
   // `useMemo` and `useCallback` exist in React because the component body runs
   // again on every render: one caches a result across those runs, the other
   // keeps a function's identity stable across them. Neither happens here. The
@@ -1748,7 +1810,7 @@ export function compileRunOnce(
         && [...customHooks.keys()].some(binding => binding.path.node === localHookBinding.path.node))
       const analyzedHook = Boolean(t.isIdentifier(callee) && isImportedReactiveHook(localHookBinding))
       if (/^use[A-Z]/.test(hookSyntax) && !name && !localHook && !analyzedHook) throw path.buildCodeFrameError('runOnce: custom and namespace hook calls require additional compiler analysis; use named supported hooks')
-      const supportedHooks = new Set(['useState', 'useRef', 'useEffect', 'useContext', 'useCallback', 'useMemo'])
+      const supportedHooks = new Set(['useState', 'useRef', 'useEffect', 'useContext', 'useCallback', 'useMemo', 'useReducer'])
       if (name && /^use[A-Z]/.test(name) && !supportedHooks.has(name)) throw path.buildCodeFrameError(`runOnce: ${name} is not supported by this compiler pass yet`)
       if (t.isMemberExpression(path.node.callee) && t.isIdentifier(path.node.callee.property, { name: 'map' })) {
         const object = path.get('callee.object')

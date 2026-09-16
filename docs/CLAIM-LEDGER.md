@@ -27,21 +27,27 @@ supports a performance claim.
 | The compiler infers arbitrary module contracts | Unsupported | “Manual exact-path contracts identify supported imports.” |
 | Opaque replacement lists preserve keyed identity | Unsupported, Phase 5 blocker | “Opaque replacement arrays are rejected.” |
 | Faster, smaller or lower-memory than React | Unverified for the current compiler path. Roadmap P8 | Make no numerical or comparative performance claim. |
-| The published npm packages contain this compiler | They do not. `@rrjs/signals@0.1.2`, `@rrjs/react-compat@0.1.0`, `@rrjs/renderer@0.1.7` and `@rrjs/babel-plugin@0.1.1` were published in May 2026. The May tarball of the plugin contains no `runOnce` and no `run-once.js`; its `dist/` is `index.js` and `index.d.ts` only | “Four packages are on npm, but the published versions predate this compiler. Installing them today gives the older path.” |
+| The published npm packages contain this compiler | Not yet. npm holds `@rrjs/signals@0.1.2`, `@rrjs/react-compat@0.1.0`, `@rrjs/renderer@0.1.7` and `@rrjs/babel-plugin@0.1.1`, from May 2026. The plugin tarball there has no `runOnce` and no `run-once.js`, and `@rrjs/renderer@0.1.7` cannot be imported at all: it declares its siblings as `file:` paths. Version 0.2.0 is prepared in this tree and unpublished | “Four packages are on npm, but the published versions predate this compiler. Version 0.2.0 carries it.” |
 
 ## Release state
 
-The four packages exist on npm under `samabaasi`, published in May 2026 and one
-patch version behind the working tree. None of them contain the compiler: the
-published `@rrjs/babel-plugin@0.1.1` tarball has no `runOnce` option and no
-`run-once.js`, and `run-once.ts` first enters this repository's history in
-September 2026.
+The four packages exist on npm under `samabaasi`, published in May 2026. None of
+them contain the compiler: the published `@rrjs/babel-plugin@0.1.1` tarball has
+no `runOnce` option and no `run-once.js`, and `run-once.ts` first enters this
+repository's history in September 2026.
 
-So `npm install @rrjs/...` today installs the older reactive-wrapping path, on
-which an ordinary React counter renders the source text of a getter. Everything
-verified in this ledger is verified against the working tree, not against
-anything a reader can install. Publishing the current tree is a breaking change
-for existing installs and needs a version bump larger than a patch.
+The published `@rrjs/renderer@0.1.7` is also unusable. Its manifest declares
+`@rrjs/signals` and `@rrjs/react-compat` as `file:` paths, so `npm install`
+succeeds without them and the first import fails with
+`Cannot find package '@rrjs/signals'`. Reproduced in an empty directory. The
+consumer gate had not caught it because it installs the four tarballs together;
+it now rejects a workspace specifier before packing.
+
+Version 0.2.0 is prepared in this tree and not yet published. `npm pack --dry-run`
+for each package lists only `dist/`, `README.md`, `LICENSE` and `package.json`,
+with internal dependencies declared as `^0.2.0`. Until it is published,
+everything verified in this ledger is verified against the working tree, not
+against anything a reader can install.
 
 ## Differences from React that must be stated, not omitted
 
@@ -54,30 +60,37 @@ for existing installs and needs a version bump larger than a patch.
 
 ## Current evidence
 
-Source digest `5250f1493a95a3e1bbff20e44ea470c09b52937818255e76d3c3603a541fafe6`,
+Source digest `17320e883d9f12340215722d7eff010fc0631b1f6bf4e2321e84ed101236e9b3`,
 covering the 124 hashed source files. All eight gates pass at that digest in
-Chrome 152.0.7977.83:
+Chrome 152.0.7977.83, in one uninterrupted run with each report starting after
+the previous one finished:
 
 | Gate | Steps | Report under `.private/acceptance/` |
 | --- | --- | --- |
-| Phase 0 | 10 | `2026-09-16T12-18-26-195Z` |
-| Phase 1 | 10 | `2026-09-16T12-19-29-272Z` |
-| Phase 2 | 10 | `2026-09-16T12-20-33-066Z` |
-| Phase 3 | 10 | `2026-09-16T12-21-38-632Z` |
-| Phase 4 | 10 | `2026-09-16T12-22-46-048Z` |
-| Phase 5 | 10 | `2026-09-16T12-23-57-528Z` |
-| Phase 6 | 15 | `2026-09-16T12-25-05-061Z` |
-| Phase 7 | 18 | `2026-09-16T12-26-47-527Z` |
+| Phase 0 | 10 | `2026-09-16T16-26-45-419Z` |
+| Phase 1 | 10 | `2026-09-16T16-29-04-297Z` |
+| Phase 2 | 10 | `2026-09-16T16-30-26-735Z` |
+| Phase 3 | 10 | `2026-09-16T16-31-25-979Z` |
+| Phase 4 | 10 | `2026-09-16T16-32-25-776Z` |
+| Phase 5 | 10 | `2026-09-16T16-33-25-327Z` |
+| Phase 6 | 15 | `2026-09-16T16-34-24-840Z` |
+| Phase 7 | 18 | `2026-09-16T16-37-34-969Z` |
 
-Suites at that digest: 287 package tests across 4 packages and 172 integration
+An earlier run at the same digest is not cited: a gate run that was meant to be
+stopped kept going and overlapped it for fifteen minutes. Overlapping reports are
+not evidence, however green.
+
+Suites at that digest: 287 package tests across 4 packages and 174 integration
 tests across 18 files, with no failures and no skips. Every test asserts a
 result; the repository contains no `expect(true)`, `.skip` or `.only`. That makes
 a passing run evidence for the cases it covers and for nothing beyond them.
 
-Seventeen of the eighteen ordinary React patterns in
-`apps/compat-audit/tests/react-pattern-corpus.test.ts` compile and run on the
-default path. The one refusal, `useReducer`, is asserted as a refusal rather
-than omitted from the count.
+`apps/compat-audit/tests/react-pattern-corpus.test.ts` asserts twenty ordinary
+React patterns on the default path — state, updaters, fragments, nested and
+defaulted props, ternaries, object and array state, boolean and numeric style
+attributes, event arguments, context, `useMemo`, `useCallback` and `useReducer`
+— and none is refused. Where behaviour differs from React the reference runs in
+the same test. Twenty patterns is a corpus, not a proof of P4.
 
 Re-run the gates after any change to a hashed source file. Reports do not
 certify code they did not run against, and the harness refuses to certify a tree

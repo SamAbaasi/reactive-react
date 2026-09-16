@@ -1,9 +1,9 @@
 // How far "ordinary React" actually goes on the default compiler path.
 //
-// Eighteen patterns a React developer writes without thinking about them,
-// compiled with the plugin's defaults and no adaptation. Fifteen run. Three are
-// refused, each with a named diagnostic, and they are asserted here as refusals
-// rather than left out of the count.
+// Patterns a React developer writes without thinking about them, compiled with
+// the plugin's defaults and no adaptation, each asserted against the result it
+// actually produces. Where the behaviour differs from React the reference is run
+// in the same test rather than described.
 //
 // This file exists so the supported surface has a number that cannot drift
 // quietly. A pattern that starts working must be moved up; one that stops
@@ -136,19 +136,45 @@ describe('ordinary React patterns on the default path', () => {
     expect(text(r.container)).toBe('1')
   })
 
+  it("useReducer, including React's queued dispatch order", async () => {
+    // React queues dispatches and applies them in sequence, so two in one
+    // handler move the state twice. Compiled to a functional updater, which has
+    // the same behaviour. React is run here too rather than trusted.
+    const source = `function C(){ const [s,d]=useReducer((a,x)=>a+x,0); return <button onClick={()=>{d(1);d(1);}}>{s}</button>; }`
+    const target = mount(source)
+    expect(text(target.container)).toBe('0')
+    press(target)
+    expect(text(target.container)).toBe('2')
+
+    const Reference = () => {
+      const [s, d] = React.useReducer((a: number, x: number) => a + x, 0)
+      return React.createElement('button', { onClick: () => { d(1); d(1) } }, String(s))
+    }
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await React.act(async () => { root.render(React.createElement(Reference)) })
+    expect(host.textContent).toBe('0')
+    await React.act(async () => { host.querySelector('button')!.click() })
+    expect(host.textContent).toBe('2')
+    await React.act(async () => { root.unmount() })
+  })
+
+  it('useReducer with a lazy initialiser', () => {
+    const r = mount(`function C(){ const [s,d]=useReducer(a=>a,5,x=>x*3); return <button onClick={()=>d()}>{s}</button>; }`)
+    expect(text(r.container)).toBe('15')
+  })
+
+  it('useReducer with a named reducer and object state', () => {
+    const r = mount(`function reduce(a,x){ return {n:a.n+x}; } function C(){ const [s,d]=useReducer(reduce,{n:0}); return <button onClick={()=>d(2)}>{s.n}</button>; }`)
+    expect(text(r.container)).toBe('0')
+    press(r)
+    expect(text(r.container)).toBe('2')
+  })
+
   it('context consumer under a provider', () => {
     const r = mount(`const X=createContext('d'); function K(){ return <i>{useContext(X)}</i>; } function C(){ return <X.Provider value="p"><K/></X.Provider>; }`)
     expect(text(r.container)).toBe('p')
-  })
-})
-
-describe('ordinary React patterns the default path refuses', () => {
-  // Named so the gap has a number. Closing one means moving it above.
-  it.each([
-    ['useReducer', `function C(){ const [s,d]=useReducer((a,x)=>a+x,0); return <button onClick={()=>d(1)}>{s}</button>; }`,
-      /useReducer is not supported by this compiler pass yet/],
-  ])('refuses %s with a named diagnostic', (_name, source, pattern) => {
-    expect(() => compileDefault(source)).toThrow(pattern as RegExp)
   })
 })
 

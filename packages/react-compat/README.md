@@ -1,6 +1,15 @@
 # @rrjs/react-compat
 
-React hooks implemented on top of signals. Designed so React code translates with minimal changes: state is read through a getter (`count()` instead of `count`). Inside JSX the Babel plugin handles this automatically.
+React hooks implemented on top of signals — the runtime that `@rrjs/babel-plugin`
+compiles components against.
+
+Most code does not call these hooks by hand. Write ordinary React, where state is
+a value (`count`), and the plugin's default path compiles each read into the
+getter call these hooks expect. See the plugin's README for what it accepts.
+
+At this level the hooks return getters, so code that uses them directly with
+`h()` and no compiler reads state as `count()`. The quick start below shows that
+direct use.
 
 ## Install
 
@@ -8,7 +17,7 @@ React hooks implemented on top of signals. Designed so React code translates wit
 npm install @rrjs/react-compat @rrjs/signals @rrjs/renderer
 ```
 
-## Quick start
+## Quick start: direct use without the compiler
 
 ```js
 import { useState, useEffect, useMemo } from '@rrjs/react-compat'

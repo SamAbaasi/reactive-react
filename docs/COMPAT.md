@@ -38,8 +38,8 @@ the behaviour React would produce, so it stops instead of guessing:
   supplied by external code and fixed arrays whose contents read reactive values;
 - `useEffect` with a dependency argument that is not a literal array, or a
   callback that is not written inline;
-- `useReducer`, a block-bodied `useMemo`, and any other hook outside
-  `useState`, `useRef`, `useEffect`, `useContext`, `useMemo` and `useCallback`;
+- a block-bodied or parameterised `useMemo`, and any hook outside `useState`,
+  `useRef`, `useEffect`, `useContext`, `useMemo`, `useCallback` and `useReducer`;
 - context provider values other than scalars, owned bindings, and object or array
   literals built from those;
 - component props that escape through spread or computed access;

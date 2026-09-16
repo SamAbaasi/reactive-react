@@ -1,6 +1,13 @@
 # @rrjs/renderer
 
-The DOM renderer. Mounts components, manages reactive bindings between signals and DOM nodes, and reconciles keyed lists.
+The DOM renderer. Mounts components and manages reactive bindings between signals
+and DOM nodes.
+
+It supports two list strategies. Code compiled by `@rrjs/babel-plugin`'s default
+path uses `operationList`, which applies known insert, move and remove operations
+directly and never compares old and new keyed arrays. The `list()` primitive below
+is a keyed reconciler; it is what the plugin's `runOnce: false` path emits, and it
+remains available for direct use.
 
 ## Install
 

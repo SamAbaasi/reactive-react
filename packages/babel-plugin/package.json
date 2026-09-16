@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/babel-plugin",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Babel plugin that compiles JSX to h() calls with reactive bindings for Reactive React",
   "type": "module",
   "main": "./dist/index.js",
@@ -35,9 +35,10 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "@rrjs/renderer": "*"
+    "@rrjs/renderer": "^0.2.0"
   },
   "author": "Saman Abaasi <samyar1992@gmail.com>",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/SamAbaasi/reactive-react.git",
