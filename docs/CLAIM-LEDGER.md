@@ -27,27 +27,39 @@ supports a performance claim.
 | The compiler infers arbitrary module contracts | Unsupported | “Manual exact-path contracts identify supported imports.” |
 | Opaque replacement lists preserve keyed identity | Unsupported, Phase 5 blocker | “Opaque replacement arrays are rejected.” |
 | Faster, smaller or lower-memory than React | Unverified for the current compiler path. Roadmap P8 | Make no numerical or comparative performance claim. |
-| The published npm packages contain this compiler | Not yet. npm holds `@rrjs/signals@0.1.2`, `@rrjs/react-compat@0.1.0`, `@rrjs/renderer@0.1.7` and `@rrjs/babel-plugin@0.1.1`, from May 2026. The plugin tarball there has no `runOnce` and no `run-once.js`, and `@rrjs/renderer@0.1.7` cannot be imported at all: it declares its siblings as `file:` paths. Version 0.2.0 is prepared in this tree and unpublished | “Four packages are on npm, but the published versions predate this compiler. Version 0.2.0 carries it.” |
+| The published npm packages work in Node tooling | 0.2.0 is on npm and runs the compiler, but it keeps a Node process alive after `@rrjs/react-compat` or `@rrjs/renderer` is imported, and it cannot be loaded with `require()` or named in a synchronous Babel configuration. 0.2.1 fixes both and is prepared in this tree | “Use 0.2.1 or later.” Do not describe 0.2.0 as working in Jest, Node scripts or other CommonJS tooling. |
 
 ## Release state
 
-The four packages exist on npm under `samabaasi`, published in May 2026. None of
-them contain the compiler: the published `@rrjs/babel-plugin@0.1.1` tarball has
-no `runOnce` option and no `run-once.js`, and `run-once.ts` first enters this
-repository's history in September 2026.
+**0.1.x (May 2026).** None of these contain the compiler: the plugin tarball has
+no `runOnce` and no `run-once.js`. `@rrjs/renderer@0.1.7` also cannot be used at
+all: it declares its siblings as `file:` paths, so the first import fails with
+`Cannot find package '@rrjs/signals'`.
 
-The published `@rrjs/renderer@0.1.7` is also unusable. Its manifest declares
-`@rrjs/signals` and `@rrjs/react-compat` as `file:` paths, so `npm install`
-succeeds without them and the first import fails with
-`Cannot find package '@rrjs/signals'`. Reproduced in an empty directory. The
-consumer gate had not caught it because it installs the four tarballs together;
-it now rejects a workspace specifier before packing.
+**0.2.0 (published 2026-09-17).** Verified on the registry: all four at 0.2.0 and
+tagged `latest`, MIT, file counts 11, 75, 11 and 9, internal ranges `^0.2.0`, and
+the `@rrjs/signals` shasum identical to the tarball tested locally. Installing
+`@rrjs/renderer@0.2.0` alone into an empty directory now brings `signals` and
+`react-compat` from the registry. With nothing but the published packages, an
+ordinary React counter - state read as a value, a handler, a derived value and a
+dependency-less `useEffect` - compiled with the plugin's defaults, rendered
+`Clicked 0 times`, updated to `Clicked 1 times` with `doubled: 2`, and set the
+document title from its effect.
 
-Version 0.2.0 is prepared in this tree and not yet published. `npm pack --dry-run`
-for each package lists only `dist/`, `README.md`, `LICENSE` and `package.json`,
-with internal dependencies declared as `^0.2.0`. Until it is published,
-everything verified in this ledger is verified against the working tree, not
-against anything a reader can install.
+Two defects were found the same way:
+
+- Importing `@rrjs/react-compat` or `@rrjs/renderer` kept Node alive. Imported
+  alone with an eight-second limit, `@rrjs/signals` exited in 135 ms and the other
+  two never exited. The cause is a `MessageChannel` port created at import time in
+  `dist/instance.js`. Browsers are unaffected.
+- `require()` of any package failed with `ERR_PACKAGE_PATH_NOT_EXPORTED`, and
+  `babel.transformSync` with the plugin named in configuration failed the same way
+  while `transformAsync` worked. The `exports` map had only an `import` condition.
+
+**0.2.1 (prepared, not yet published).** Fixes both. The consumer gate failed on
+the original code with `keeps Node alive`, failed on a fix that only released the
+port with `a passive effect ... never ran`, failed with only the scheduler fixed
+on `ERR_PACKAGE_PATH_NOT_EXPORTED`, and passes with both fixes.
 
 ## Differences from React that must be stated, not omitted
 
@@ -60,25 +72,32 @@ against anything a reader can install.
 
 ## Current evidence
 
-Source digest `17320e883d9f12340215722d7eff010fc0631b1f6bf4e2321e84ed101236e9b3`,
-covering the 124 hashed source files. All eight gates pass at that digest in
-Chrome 152.0.7977.83, in one uninterrupted run with each report starting after
-the previous one finished:
+Source digest `5892213620fcc96aadf02b618e148f873b9e59d35f0fb1524cd370af260625cb`,
+covering the 124 hashed source files, at version 0.2.1. All eight gates pass at
+that digest in Chrome 152.0.7977.83, in one uninterrupted run with each report
+starting after the previous one finished:
 
 | Gate | Steps | Report under `.private/acceptance/` |
 | --- | --- | --- |
-| Phase 0 | 10 | `2026-09-16T16-26-45-419Z` |
-| Phase 1 | 10 | `2026-09-16T16-29-04-297Z` |
-| Phase 2 | 10 | `2026-09-16T16-30-26-735Z` |
-| Phase 3 | 10 | `2026-09-16T16-31-25-979Z` |
-| Phase 4 | 10 | `2026-09-16T16-32-25-776Z` |
-| Phase 5 | 10 | `2026-09-16T16-33-25-327Z` |
-| Phase 6 | 15 | `2026-09-16T16-34-24-840Z` |
-| Phase 7 | 18 | `2026-09-16T16-37-34-969Z` |
+| Phase 0 | 10 | `2026-09-17T06-48-17-035Z` |
+| Phase 1 | 10 | `2026-09-17T06-49-29-559Z` |
+| Phase 2 | 10 | `2026-09-17T06-50-27-697Z` |
+| Phase 3 | 10 | `2026-09-17T06-51-24-558Z` |
+| Phase 4 | 10 | `2026-09-17T06-52-20-838Z` |
+| Phase 5 | 10 | `2026-09-17T06-53-18-490Z` |
+| Phase 6 | 15 | `2026-09-17T06-54-15-380Z` |
+| Phase 7 | 18 | `2026-09-17T06-55-37-198Z` |
 
-An earlier run at the same digest is not cited: a gate run that was meant to be
-stopped kept going and overlapped it for fifteen minutes. Overlapping reports are
-not evidence, however green.
+The Phase 6 target trace records eleven component instances, each entering once
+with no repeated instance id, eleven disposals, no reconciler entry, and fifteen
+checkpoints on both the React and target runs.
+
+The external-consumer step inside those runs packs the four 0.2.1 tarballs and
+installs them into a fresh consumer. Besides ESM imports, public types, strict
+compilation and a production bundle, it now runs a script with no forced exit
+that must end on its own after a passive effect has run, and loads all four
+packages through `require()` with the plugin compiled by name through
+synchronous Babel.
 
 Suites at that digest: 287 package tests across 4 packages and 174 integration
 tests across 18 files, with no failures and no skips. Every test asserts a

@@ -4,6 +4,10 @@
  * Bundlers hide extensionless specifiers; this does not.
  *
  * Requires dist/ (run `npm run build:all` first).
+ *
+ * This ends with a forced exit, so it cannot tell whether a package keeps Node
+ * alive after import. That is asserted, with no forced exit, by the lifetime
+ * check in verify-external-consumer.mjs.
  */
 import { pathToFileURL } from 'node:url'
 import { join, dirname } from 'node:path'

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.1
+
+Two defects found by installing 0.2.0 from npm into an empty directory, after it
+was published.
+
+- Importing `@rrjs/react-compat`, or `@rrjs/renderer` which depends on it, kept
+  Node running forever. The passive-effect scheduler created a `MessageChannel`
+  at import time, and a port with a listener holds Node's event loop open. The
+  port is now held only while a flush is waiting, so a Node process ends on its
+  own and an effect scheduled just before the end still runs. Browsers are
+  unaffected, and delivery still uses the same channel, so effect timing does not
+  change. The consumer gate now runs a script with no forced exit and checks both
+  that it ends and that the effect ran; a fix that only released the port drops
+  the effect, and that variant was confirmed to fail it.
+- The packages could not be loaded with `require()`, and the Babel plugin could
+  not be named in a configuration used by a synchronous Babel call - `babel-jest`,
+  `@babel/register` and Metro among them - which failed with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`. Each package's `exports` now carries a
+  `default` condition. `require()` of these ES modules relies on Node's own
+  support for it, which Node documents as available without flags from 20.19 and
+  22.12; it is verified here on Node 24.13.1.
+
+Internal dependency ranges are `^0.2.1`, so installing the renderer brings the
+fixed scheduler with it.
+
 ## 0.2.0
 
 Breaking. `runOnce` is now the compiler's default; the older reactive-wrapping

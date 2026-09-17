@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/renderer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Signal-driven DOM renderer with keyed list reconciliation. No VDOM.",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,7 +8,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -23,8 +24,8 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@rrjs/signals": "^0.2.0",
-    "@rrjs/react-compat": "^0.2.0"
+    "@rrjs/signals": "^0.2.1",
+    "@rrjs/react-compat": "^0.2.1"
   },
   "devDependencies": {
     "vitest": "^1.0.0",

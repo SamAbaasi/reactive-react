@@ -96,6 +96,61 @@ process.exit(0)
 `)
   run(process.execPath, ['import-check.mjs'], consumer)
 
+  // import-check.mjs forces its own exit, so it cannot notice a module that
+  // keeps Node alive. @rrjs/react-compat@0.2.0 did exactly that: a MessageChannel
+  // created at import time held the event loop open, and any Node script that
+  // imported the renderer never ended. This check has no forced exit. It must end
+  // on its own, and a passive effect scheduled just before the end must still
+  // have run -- a fix that simply stops holding the loop open drops that effect.
+  const jsdomPath = require.resolve('jsdom', { paths: [join(ROOT, 'apps', 'compat-audit')] })
+  writeFileSync(join(consumer, 'lifetime-check.mjs'), `
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+const { JSDOM } = require(${JSON.stringify(jsdomPath)})
+const dom = new JSDOM('<!doctype html><div id="app"></div>')
+for (const key of ['window', 'document', 'Node', 'DocumentFragment', 'HTMLElement', 'Element', 'Text', 'Comment', 'SVGElement', 'Event', 'MouseEvent']) globalThis[key] = dom.window[key]
+const { h, mount } = await import('@rrjs/renderer')
+const { useEffect } = await import('@rrjs/react-compat')
+function App() {
+  useEffect(() => { console.log('passive effect ran') }, [])
+  return h('p', null, 'mounted')
+}
+mount(App, document.getElementById('app'))
+console.log('rendered:', document.getElementById('app').textContent)
+`)
+  const lifetime = spawnSync(process.execPath, ['lifetime-check.mjs'], { cwd: consumer, encoding: 'utf8', timeout: 20_000 })
+  if (lifetime.error?.code === 'ETIMEDOUT') {
+    throw new Error('importing the packages keeps Node alive: lifetime-check.mjs did not exit within 20s')
+  }
+  if (lifetime.status !== 0) throw new Error(`lifetime-check.mjs exited ${lifetime.status}:\n${lifetime.stderr}`)
+  if (!lifetime.stdout.includes('rendered: mounted')) throw new Error(`lifetime-check.mjs did not render:\n${lifetime.stdout}`)
+  if (!lifetime.stdout.includes('passive effect ran')) {
+    throw new Error(`a passive effect scheduled before the process ended never ran:\n${lifetime.stdout}`)
+  }
+
+  // Tools that call Babel synchronously -- babel-jest, @babel/register, Metro --
+  // load a plugin named in configuration through require(). With only an
+  // `import` export condition that fails with ERR_PACKAGE_PATH_NOT_EXPORTED, and
+  // so does any CommonJS require of the runtime packages. Load all four through
+  // require, then compile with the plugin given by name and no options, which
+  // also asserts the published default path.
+  writeFileSync(join(consumer, 'commonjs-check.cjs'), `
+const assert = require('node:assert/strict')
+for (const name of ['@rrjs/signals', '@rrjs/react-compat', '@rrjs/renderer', '@rrjs/babel-plugin']) {
+  assert.ok(Object.keys(require(name)).length > 0, name + ' exposes nothing through require')
+}
+const babel = require('@babel/core')
+const result = babel.transformSync('function App(){ const [n,setN]=useState(0); return <b onClick={()=>setN(n+1)}>{n}</b> }', {
+  filename: 'App.jsx', cwd: __dirname, root: __dirname, configFile: false, babelrc: false,
+  plugins: ['@rrjs/babel-plugin'], parserOpts: { plugins: ['jsx'] },
+})
+assert.match(result.code, /\(\) => n\(\)/, 'the plugin loaded by name did not compile the default path')
+console.log('require and synchronous Babel by plugin name: ok')
+// Lifetime is asserted by lifetime-check.mjs; this check only isolates require.
+process.exit(0)
+`)
+  run(process.execPath, ['commonjs-check.cjs'], consumer)
+
   writeFileSync(join(consumer, 'contract-check.ts'), `
 import type { ModuleContractManifest, ModuleMetadata, PluginOptions } from '@rrjs/babel-plugin'
 import { defineModuleContracts, resolveModuleMetadata } from '@rrjs/babel-plugin'

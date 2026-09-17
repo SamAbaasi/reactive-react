@@ -94,10 +94,24 @@ export function withInstance<T>(
 const channel = new MessageChannel()
 const pendingPassiveFlushes: Array<() => void> = []
 
-channel.port1.onmessage = () => {
+// In Node a MessagePort with a listener keeps the event loop alive, so importing
+// this module used to stop a Node process from ever exiting on its own. Hold the
+// port only while a flush is waiting: a scheduled effect is still delivered
+// before the process ends, and an idle module keeps nothing open. Browsers have
+// no ref/unref, so this changes nothing there, and delivery still goes through
+// the same channel, so effect timing is unchanged.
+type Referable = { ref?: () => void; unref?: () => void }
+const receiver = channel.port1 as MessagePort & Referable
+
+receiver.onmessage = () => {
   const flushes = pendingPassiveFlushes.splice(0)
-  for (const flush of flushes) flush()
+  try {
+    for (const flush of flushes) flush()
+  } finally {
+    if (pendingPassiveFlushes.length === 0) receiver.unref?.()
+  }
 }
+receiver.unref?.()
 
 export function flushLayoutEffects(instance: ComponentInstance): void {
   // Run synchronously. Cleanup of previous effect, then run new effect.
@@ -128,5 +142,6 @@ export function flushPassiveEffects(instance: ComponentInstance): void {
     }
   })
 
+  receiver.ref?.()
   channel.port2.postMessage(null)
 }

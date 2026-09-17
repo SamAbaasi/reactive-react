@@ -51,6 +51,13 @@ npm install @rrjs/signals @rrjs/renderer @rrjs/react-compat
 npm install -D @rrjs/babel-plugin @babel/core @babel/preset-typescript
 ```
 
+The packages are ES modules. `import` works everywhere they run. `require()`,
+and naming the plugin in a Babel configuration that is used synchronously (for
+example by `babel-jest`), rely on Node's support for loading ES modules with
+`require`, which Node documents from 20.19 and 22.12. That path is verified on
+Node 24.13.1. Use 0.2.1 or later: 0.2.0 kept Node processes from exiting and
+could not be required.
+
 See [`docs/MIGRATION.md`](./docs/MIGRATION.md) for Vite, Webpack, and esbuild setup.
 
 ---

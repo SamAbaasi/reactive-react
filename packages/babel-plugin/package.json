@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/babel-plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Babel plugin that compiles JSX to h() calls with reactive bindings for Reactive React",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,7 +8,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -35,7 +36,7 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "@rrjs/renderer": "^0.2.0"
+    "@rrjs/renderer": "^0.2.1"
   },
   "author": "Saman Abaasi <samyar1992@gmail.com>",
   "license": "MIT",
