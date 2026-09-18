@@ -94,7 +94,9 @@ produces. The `exports` map does not expose them and nothing imports them.
 
 **0.2.2 (published 2026-09-18).** Every build empties `dist/` first, and the
 consumer gate compares each packed `dist/` with a fresh compile of its source. No
-runtime code changed. `prepublishOnly` passed 53, 111, 76 and 47 tests.
+runtime code changed. `prepublishOnly` passed 53, 111, 76 and 47 tests. The
+published tree passed all eight gates at digest `16e6442079133d4d…`, in reports
+`2026-09-18T09-05-34-028Z` to `2026-09-18T09-16-08-194Z`.
 
 Verified on the registry the same day. All four are at 0.2.2 and tagged
 `latest`, npm records commit `43663fd` as their `gitHead`, and each tarball
@@ -124,25 +126,22 @@ before 0.2.2.
 
 ## Current evidence
 
-Source digest `16e6442079133d4d6f96783254132c274f76e3d89b4c7f883281a0f8cd2dc5bc`,
-covering the 125 hashed source files, at version 0.2.2. All eight gates pass at
-that digest in Chrome 153.0.8010.48, in one uninterrupted run with each report
-starting after the previous one finished:
+Source digest `6d923f920977b447fa8a93873319791d1b0a674a092891caedc4eea62fba85d0`,
+covering the 127 hashed source files: version 0.2.2 plus the unreleased JSX text
+fix in the changelog. All eight gates pass at that digest in Chrome
+153.0.8010.48, in one uninterrupted run with each report starting after the
+previous one finished:
 
 | Gate | Steps | Report under `.private/acceptance/` |
 | --- | --- | --- |
-| Phase 0 | 10 | `2026-09-18T09-05-34-028Z` |
-| Phase 1 | 10 | `2026-09-18T09-08-11-521Z` |
-| Phase 2 | 10 | `2026-09-18T09-09-21-292Z` |
-| Phase 3 | 10 | `2026-09-18T09-10-30-995Z` |
-| Phase 4 | 10 | `2026-09-18T09-11-40-740Z` |
-| Phase 5 | 10 | `2026-09-18T09-12-49-268Z` |
-| Phase 6 | 15 | `2026-09-18T09-14-00-429Z` |
-| Phase 7 | 18 | `2026-09-18T09-16-08-194Z` |
-
-An earlier run of this tree, started on 2026-09-17, is not cited: the laptop went
-into standby during Phase 0 and the step was killed on resume, and it slept again
-during Phase 7.
+| Phase 0 | 10 | `2026-09-18T10-31-58-080Z` |
+| Phase 1 | 10 | `2026-09-18T10-33-01-443Z` |
+| Phase 2 | 10 | `2026-09-18T10-34-12-467Z` |
+| Phase 3 | 10 | `2026-09-18T10-35-21-421Z` |
+| Phase 4 | 10 | `2026-09-18T10-36-32-942Z` |
+| Phase 5 | 10 | `2026-09-18T10-37-38-808Z` |
+| Phase 6 | 15 | `2026-09-18T10-38-41-502Z` |
+| Phase 7 | 18 | `2026-09-18T10-40-16-609Z` |
 
 The Phase 6 target trace records eleven component instances, each entering once
 with no repeated instance id, eleven disposals, no reconciler entry, and fifteen
@@ -160,10 +159,10 @@ requires the packed `dist/` to match it file for file; runs a script with no
 forced exit that must reach its last line and then end on its own after a
 passive effect has run; and loads all four packages through `require()` with the
 plugin compiled by name through synchronous Babel. In the two reports that run
-it, the lifetime script exited by itself after 588 ms and 634 ms.
+it, the lifetime script exited by itself after 543 ms and 613 ms.
 
-Suites at that digest: 287 package tests across 4 packages and 174 integration
-tests across 18 files, with no failures and no skips. Every test asserts a
+Suites at that digest: 288 package tests across 4 packages and 175 integration
+tests across 19 files, with no failures and no skips. Every test asserts a
 result; the repository contains no `expect(true)`, `.skip` or `.only`. That makes
 a passing run evidence for the cases it covers and for nothing beyond them.
 

@@ -12,6 +12,7 @@
     "typecheck:react": "tsc -p tsconfig.react.json --noEmit",
     "typecheck:rrjs": "tsc -p tsconfig.rrjs.json --noEmit",
     "dev:run-once": "vite --config vite.config.run-once.ts",
+    "dev:run-once-reference": "vite --config vite.config.run-once-reference.ts --port 5214 --strictPort",
     "dev:phase6": "vite --config vite.config.phase6.ts --port 5213 --strictPort",
     "build:run-once": "vite build --config vite.config.run-once.ts",
     "build:run-once-reference": "vite build --config vite.config.run-once-reference.ts",

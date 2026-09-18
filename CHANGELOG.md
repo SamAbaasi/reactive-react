@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- JSX text now comes out the way React's JSX transform leaves it. The compiler
+  emitted each text child verbatim, so `{name} theme` followed by a line break
+  and indentation kept both: the issue app's theme button read
+  `"Light theme\n        "` where React reads `"Light theme"`. Whitespace that
+  touches a line break is now dropped and lines are joined with one space, using
+  Babel's own `react.buildChildren`, on both compiler paths. The page looked the
+  same because CSS collapses the whitespace, but `textContent`, text under
+  `white-space: pre` and any exact text comparison did not.
+  `apps/compat-audit/tests/jsx-text.test.ts` compares every text node with
+  React 19.2. The helper the other suites use collapses whitespace, which is why
+  none of them caught it.
+- `apps/flip` gains `dev:run-once-reference`, React's side of the `RunOnce.tsx`
+  fixture, so the execution counter can be compared side by side.
+
 ## 0.2.2
 
 Found by checking 0.2.1 as the registry serves it: each package's source was

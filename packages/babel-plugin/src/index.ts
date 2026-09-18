@@ -3,6 +3,7 @@ import * as t from '@babel/types'
 import jsxSyntaxPlugin from '@babel/plugin-syntax-jsx'
 import { addNamed } from '@babel/helper-module-imports'
 import { compileRunOnce } from './run-once.js'
+import { jsxTextValue } from './jsx-text.js'
 import type { ModuleMetadata } from './module-contracts.js'
 
 type IntrinsicNamespace = 'html' | 'svg'
@@ -336,7 +337,7 @@ function transformChild(
   rt: Runtime
 ): t.Expression {
   if (t.isJSXText(child)) {
-    return t.stringLiteral(child.value)
+    return t.stringLiteral(jsxTextValue(child))
   }
 
   if (t.isJSXExpressionContainer(child)) {
@@ -477,10 +478,5 @@ function filterChildren(
 ): typeof children {
   // Preserve intentional inline spaces between children. Whitespace containing
   // a line break is formatting indentation and does not produce a React child.
-  return children.filter(child => {
-    if (t.isJSXText(child)) {
-      return child.value.trim().length > 0 || !/[\r\n]/.test(child.value)
-    }
-    return true
-  })
+  return children.filter(child => !t.isJSXText(child) || jsxTextValue(child).length > 0)
 }

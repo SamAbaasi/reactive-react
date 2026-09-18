@@ -20,6 +20,19 @@ npm run dev:react      # React 19.2, http://localhost:5210
 Open both and use them side by side: toggle an issue, reorder rows, switch
 theme, add one from the New form, watch the tab title count change.
 
+To see the component body run once, use the smaller `RunOnce.tsx` fixture, which
+prints how many times its body has executed:
+
+```bash
+npm run dev:run-once              # the compiler, http://localhost:5212
+npm run dev:run-once-reference    # React 19.2, http://localhost:5214
+```
+
+Click Increment on both. The count and the doubled value move together; React's
+execution count rises with every update, and the compiled build's stays at 1.
+"Two updates from one snapshot" adds one on both, as React's snapshot semantics
+require.
+
 `npm run dev:rrjs` serves the same application through the older `runOnce: false`
 path. It renders the shell and then fails with
 `TypeError: issues.filter is not a function`, because state there is a getter and

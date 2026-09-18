@@ -1,6 +1,7 @@
 import type { NodePath } from '@babel/core'
 import * as t from '@babel/types'
 import type { ImportedComponentContract, ModuleMetadata } from './module-contracts.js'
+import { jsxTextValue } from './jsx-text.js'
 type Binding = NonNullable<ReturnType<NodePath['scope']['getBinding']>>
 
 // This pass accepts a deliberately checked subset. It never introduces a
@@ -637,7 +638,7 @@ export function compileRunOnce(
           throw opening.buildCodeFrameError('runOnce: multiple and spread component children require child collection compilation')
         }
         const child = actualChildren[0]
-        const expression = t.isJSXText(child) ? t.stringLiteral(child.value)
+        const expression = t.isJSXText(child) ? t.stringLiteral(jsxTextValue(child))
           : t.isJSXExpressionContainer(child) && !t.isJSXEmptyExpression(child.expression)
             ? child.expression as t.Expression
             : t.isJSXElement(child) || t.isJSXFragment(child) ? child : undefined
@@ -705,7 +706,7 @@ export function compileRunOnce(
       throw opening.buildCodeFrameError('runOnce: provider currently requires exactly one owned child')
     }
     const child = actualChildren[0]
-    const childExpression = t.isJSXText(child) ? t.stringLiteral(child.value)
+    const childExpression = t.isJSXText(child) ? t.stringLiteral(jsxTextValue(child))
       : t.isJSXExpressionContainer(child) && !t.isJSXEmptyExpression(child.expression)
         ? child.expression as t.Expression
         : t.isJSXElement(child) || t.isJSXFragment(child) ? child : undefined
@@ -1376,9 +1377,9 @@ export function compileRunOnce(
     return false
   }
   const children = (node: t.JSXElement | t.JSXFragment) => node.children.filter(child =>
-    !t.isJSXText(child) || child.value.trim().length > 0 || !/[\r\n]/.test(child.value))
+    !t.isJSXText(child) || jsxTextValue(child).length > 0)
   const childExpr = (child: ReturnType<typeof children>[number] | undefined): t.Expression => !child ? t.nullLiteral()
-    : t.isJSXText(child) ? t.stringLiteral(child.value)
+    : t.isJSXText(child) ? t.stringLiteral(jsxTextValue(child))
     : t.isJSXExpressionContainer(child) ? t.isJSXEmptyExpression(child.expression) ? t.nullLiteral() : child.expression
     : t.isJSXSpreadChild(child) ? child.expression : child
   function gateByLazyAncestors(origin: NodePath, test: t.Expression): t.Expression {

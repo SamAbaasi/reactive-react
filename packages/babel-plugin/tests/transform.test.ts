@@ -298,4 +298,16 @@ describe('default options compile the runOnce path', () => {
     expect(() => withDefaults(`const x = createPortal(<div />, target, 'key')`))
       .toThrow(/createPortal keys are unsupported/)
   })
+
+  it('cleans JSX text the way React does, on both paths', () => {
+    // React's transform drops whitespace that touches a line break and joins the
+    // remaining lines with one space. apps/compat-audit/tests/jsx-text.test.ts
+    // compares the rendered result with React itself.
+    const text = `function Case(){ const [name]=useState('Light'); return <p>{name} theme\n      <b>\n        Hello\n        world\n      </b></p>; }`
+    for (const out of [withDefaults(text), legacy(text)]) {
+      expect(out).toContain('" theme"')
+      expect(out).toContain('"Hello world"')
+      expect(out).not.toMatch(/"[^"]*\\n[^"]*"/)
+    }
+  })
 })
