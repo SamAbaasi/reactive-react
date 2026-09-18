@@ -15,7 +15,7 @@ supports a performance claim.
 | The issue workflow matches React 19.2 | 15 checkpoints recorded for each of the React and target runs and compared, `docs/PHASE6.md` | “The audited 15-checkpoint Chrome workflow matches React 19.2.” |
 | List identity survives known operations | Bounded operation corpus, `docs/PHASE5.md` | “Known append, prepend, splice, move, reverse, sort, filter, map, truncate and clear operations preserve the tested identities without old/new key matching.” |
 | Native SVG works in the tested single-module JSX tree | Bounded SVG corpus, `docs/PHASE7.md` | “The tested intrinsic SVG tree matches React namespaces, attributes, updates, events, identity and cleanup.” |
-| Packages work outside workspace resolution | Fresh consumer installing local tarballs: ESM, public types, strict compilation, production bundle | “A fresh temporary consumer installed local tarballs and passed ESM, public types, strict compilation and production bundling.” |
+| Packages work outside workspace resolution | Fresh consumer installing local tarballs: ESM, public types, strict compilation, production bundle; each packed `dist/` equal to a fresh compile of its source; a Node process that ends by itself after a passive effect; `require()` and synchronous Babel with the plugin named | “A fresh temporary consumer installed local tarballs and passed ESM, public types, strict compilation and production bundling. Each package ships exactly what its source compiles to.” |
 | Components written the way React documents them compile and run unmodified | Six components asserted in `apps/compat-audit/tests/q1-unmodified-react.test.ts`: state read as a value, props, `className`, `&&`, a controlled input with `onChange`, a style object, `.map()` over a fixed array, and `useRef` with `useEffect` | “Six components written in the style of React's documentation run unmodified, within the checked subset.” |
 | `runOnce` is the default compiler path | `packages/babel-plugin/tests/transform.test.ts` asserts the default emits direct list operations and applies the runOnce diagnostics | “The compiler runs by default; `runOnce: false` selects the older path.” |
 
@@ -27,7 +27,7 @@ supports a performance claim.
 | The compiler infers arbitrary module contracts | Unsupported | “Manual exact-path contracts identify supported imports.” |
 | Opaque replacement lists preserve keyed identity | Unsupported, Phase 5 blocker | “Opaque replacement arrays are rejected.” |
 | Faster, smaller or lower-memory than React | Unverified for the current compiler path. Roadmap P8 | Make no numerical or comparative performance claim. |
-| The published npm packages work in Node tooling | 0.2.0 is on npm and runs the compiler, but it keeps a Node process alive after `@rrjs/react-compat` or `@rrjs/renderer` is imported, and it cannot be loaded with `require()` or named in a synchronous Babel configuration. 0.2.1 fixes both and is prepared in this tree | “Use 0.2.1 or later.” Do not describe 0.2.0 as working in Jest, Node scripts or other CommonJS tooling. |
+| The published npm packages work in Node tooling | 0.2.0 keeps a Node process alive after `@rrjs/react-compat` or `@rrjs/renderer` is imported, and cannot be loaded with `require()` or named in a synchronous Babel configuration. 0.2.1 fixes both and is published; the release state below records the registry check | “Use 0.2.1 or later.” Do not describe 0.2.0 as working in Jest, Node scripts or other CommonJS tooling. |
 
 ## Release state
 
@@ -56,10 +56,46 @@ Two defects were found the same way:
   `babel.transformSync` with the plugin named in configuration failed the same way
   while `transformAsync` worked. The `exports` map had only an `import` condition.
 
-**0.2.1 (prepared, not yet published).** Fixes both. The consumer gate failed on
-the original code with `keeps Node alive`, failed on a fix that only released the
-port with `a passive effect ... never ran`, failed with only the scheduler fixed
-on `ERR_PACKAGE_PATH_NOT_EXPORTED`, and passes with both fixes.
+**0.2.1 (published 2026-09-17).** Fixes both. The consumer gate failed on the
+original code with `keeps Node alive`, failed on a fix that only released the port
+with `a passive effect ... never ran`, failed with only the scheduler fixed on
+`ERR_PACKAGE_PATH_NOT_EXPORTED`, and passes with both fixes.
+
+Verified on the registry the same day. All four are at 0.2.1 and tagged
+`latest`, and npm records commit `285787a` as their `gitHead`. Each tarball
+matches the registry's sha1 and sha512 and is byte-identical to a local pack of
+that commit; the `react-compat` and `renderer` tarballs are also identical to the
+ones inspected before publishing. Installed into an empty folder outside the
+repository, where all 106 installed packages carry verified registry signatures:
+
+- each package imported alone lets Node exit by itself;
+- a passive effect scheduled at mount runs, and Node then exits by itself;
+- `require()` of all four, and `babel.transformSync` with the plugin named in
+  configuration, work;
+- the README Quick Look, compiled from npm with the plugin's defaults, counts
+  from 0 to 3;
+- a counter with state, a derived value and `useEffect(fn, [count])`, its hooks
+  imported from `@rrjs/react-compat`, shows the same button text, derived text
+  and document title as React 19.3.0 at each of four steps. Its body ran once;
+  React ran the same body four times.
+
+The same checks against 0.2.0, installed the same way, hang on import and fail
+`require()` with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
+`renderer` and `react-compat` were uploaded before `signals`, so for about two
+minutes `@rrjs/renderer@0.2.1` could not resolve `@rrjs/signals@^0.2.1`. Publish in
+dependency order: signals, react-compat, renderer, babel-plugin.
+
+One defect was found the same way. Compiling each package's source again and
+comparing it with the published `dist/` showed that `@rrjs/react-compat` and
+`@rrjs/renderer`, in 0.2.0 and 0.2.1, ship `dist/react.js`, `dist/react.d.ts` and
+their source maps: output of an uncommitted experiment that no committed source
+produces. The `exports` map does not expose them and nothing imports them.
+
+**0.2.2 (prepared, not yet published).** Every build empties `dist/` first, and
+the consumer gate compares each packed `dist/` with a fresh compile of its
+source. No runtime code changed. A publish dry run packs 11, 71, 7 and 9 files
+with no warning, and `prepublishOnly` passes 53, 111, 76 and 47 tests.
 
 ## Differences from React that must be stated, not omitted
 
@@ -72,32 +108,43 @@ on `ERR_PACKAGE_PATH_NOT_EXPORTED`, and passes with both fixes.
 
 ## Current evidence
 
-Source digest `5892213620fcc96aadf02b618e148f873b9e59d35f0fb1524cd370af260625cb`,
-covering the 124 hashed source files, at version 0.2.1. All eight gates pass at
-that digest in Chrome 152.0.7977.83, in one uninterrupted run with each report
+Source digest `16e6442079133d4d6f96783254132c274f76e3d89b4c7f883281a0f8cd2dc5bc`,
+covering the 125 hashed source files, at version 0.2.2. All eight gates pass at
+that digest in Chrome 153.0.8010.48, in one uninterrupted run with each report
 starting after the previous one finished:
 
 | Gate | Steps | Report under `.private/acceptance/` |
 | --- | --- | --- |
-| Phase 0 | 10 | `2026-09-17T06-48-17-035Z` |
-| Phase 1 | 10 | `2026-09-17T06-49-29-559Z` |
-| Phase 2 | 10 | `2026-09-17T06-50-27-697Z` |
-| Phase 3 | 10 | `2026-09-17T06-51-24-558Z` |
-| Phase 4 | 10 | `2026-09-17T06-52-20-838Z` |
-| Phase 5 | 10 | `2026-09-17T06-53-18-490Z` |
-| Phase 6 | 15 | `2026-09-17T06-54-15-380Z` |
-| Phase 7 | 18 | `2026-09-17T06-55-37-198Z` |
+| Phase 0 | 10 | `2026-09-18T09-05-34-028Z` |
+| Phase 1 | 10 | `2026-09-18T09-08-11-521Z` |
+| Phase 2 | 10 | `2026-09-18T09-09-21-292Z` |
+| Phase 3 | 10 | `2026-09-18T09-10-30-995Z` |
+| Phase 4 | 10 | `2026-09-18T09-11-40-740Z` |
+| Phase 5 | 10 | `2026-09-18T09-12-49-268Z` |
+| Phase 6 | 15 | `2026-09-18T09-14-00-429Z` |
+| Phase 7 | 18 | `2026-09-18T09-16-08-194Z` |
+
+An earlier run of this tree, started on 2026-09-17, is not cited: the laptop went
+into standby during Phase 0 and the step was killed on resume, and it slept again
+during Phase 7.
 
 The Phase 6 target trace records eleven component instances, each entering once
 with no repeated instance id, eleven disposals, no reconciler entry, and fifteen
 checkpoints on both the React and target runs.
 
-The external-consumer step inside those runs packs the four 0.2.1 tarballs and
+Every phase runs the manifest's 21 negative controls, each a deliberate violation
+the gates must catch. Eight cover the release checks: a stale, missing or changed
+`dist/` file, a changed source map, a process held open after finishing, a slow
+start, a dropped passive effect and a failing exit code.
+
+The external-consumer step inside those runs packs the four 0.2.2 tarballs and
 installs them into a fresh consumer. Besides ESM imports, public types, strict
-compilation and a production bundle, it now runs a script with no forced exit
-that must end on its own after a passive effect has run, and loads all four
-packages through `require()` with the plugin compiled by name through
-synchronous Babel.
+compilation and a production bundle, it compiles each package's source afresh and
+requires the packed `dist/` to match it file for file; runs a script with no
+forced exit that must reach its last line and then end on its own after a
+passive effect has run; and loads all four packages through `require()` with the
+plugin compiled by name through synchronous Babel. In the two reports that run
+it, the lifetime script exited by itself after 588 ms and 634 ms.
 
 Suites at that digest: 287 package tests across 4 packages and 174 integration
 tests across 18 files, with no failures and no skips. Every test asserts a

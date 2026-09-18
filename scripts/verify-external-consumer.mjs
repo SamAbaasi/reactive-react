@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
+import { assertDistMatchesSource, assertLifetime, runToExit } from './acceptance/package-checks.mjs'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const PACKAGES = ['signals', 'react-compat', 'renderer', 'babel-plugin']
@@ -86,6 +87,23 @@ try {
     ...tarballs,
   ], consumer)
 
+  // What each tarball delivered under dist/ must be what compiling the package's
+  // current source produces, file for file. react-compat and renderer 0.2.0 and
+  // 0.2.1 shipped output that no committed source produces.
+  const dist = {}
+  for (const name of PACKAGES) {
+    const packageDir = join(ROOT, 'packages', name)
+    const compiled = join(workspace, 'compiled', name, 'dist')
+    const tsc = require.resolve('typescript/bin/tsc', { paths: [packageDir] })
+    run(process.execPath, [tsc, '-p', join(packageDir, 'tsconfig.json'), '--outDir', compiled], packageDir)
+    dist[`@rrjs/${name}`] = assertDistMatchesSource({
+      name: `@rrjs/${name}`,
+      shipped: join(consumer, 'node_modules', '@rrjs', name),
+      compiled,
+      sourceRoot: packageDir,
+    })
+  }
+
   writeFileSync(join(consumer, 'import-check.mjs'), `
 for (const name of ['@rrjs/react-compat', '@rrjs/renderer', '@rrjs/signals', '@rrjs/babel-plugin']) {
   const exports = Object.keys(await import(name)).sort()
@@ -102,9 +120,13 @@ process.exit(0)
   // imported the renderer never ended. This check has no forced exit. It must end
   // on its own, and a passive effect scheduled just before the end must still
   // have run -- a fix that simply stops holding the loop open drops that effect.
+  // Reaching the last line and exiting are timed separately, so a slow start is
+  // not reported as a package holding Node open.
   const jsdomPath = require.resolve('jsdom', { paths: [join(ROOT, 'apps', 'compat-audit')] })
   writeFileSync(join(consumer, 'lifetime-check.mjs'), `
+import { appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+const stage = name => appendFileSync(process.argv[2], name + '\\n')
 const require = createRequire(import.meta.url)
 const { JSDOM } = require(${JSON.stringify(jsdomPath)})
 const dom = new JSDOM('<!doctype html><div id="app"></div>')
@@ -112,21 +134,27 @@ for (const key of ['window', 'document', 'Node', 'DocumentFragment', 'HTMLElemen
 const { h, mount } = await import('@rrjs/renderer')
 const { useEffect } = await import('@rrjs/react-compat')
 function App() {
-  useEffect(() => { console.log('passive effect ran') }, [])
+  useEffect(() => { stage('effect'); console.log('passive effect ran') }, [])
   return h('p', null, 'mounted')
 }
 mount(App, document.getElementById('app'))
 console.log('rendered:', document.getElementById('app').textContent)
+stage('finished')
 `)
-  const lifetime = spawnSync(process.execPath, ['lifetime-check.mjs'], { cwd: consumer, encoding: 'utf8', timeout: 20_000 })
-  if (lifetime.error?.code === 'ETIMEDOUT') {
-    throw new Error('importing the packages keeps Node alive: lifetime-check.mjs did not exit within 20s')
-  }
-  if (lifetime.status !== 0) throw new Error(`lifetime-check.mjs exited ${lifetime.status}:\n${lifetime.stderr}`)
+  const lifetime = await runToExit('lifetime-check.mjs', {
+    cwd: consumer,
+    stagesFile: join(consumer, 'lifetime-stages.txt'),
+    finishWithinMs: 120_000,
+    exitWithinMs: 10_000,
+  })
+  assertLifetime(lifetime, {
+    name: 'lifetime-check.mjs',
+    stages: {
+      finished: 'lifetime-check.mjs ended before its last line',
+      effect: 'a passive effect scheduled before the process ended never ran',
+    },
+  })
   if (!lifetime.stdout.includes('rendered: mounted')) throw new Error(`lifetime-check.mjs did not render:\n${lifetime.stdout}`)
-  if (!lifetime.stdout.includes('passive effect ran')) {
-    throw new Error(`a passive effect scheduled before the process ended never ran:\n${lifetime.stdout}`)
-  }
 
   // Tools that call Babel synchronously -- babel-jest, @babel/register, Metro --
   // load a plugin named in configuration through require(). With only an
@@ -210,6 +238,8 @@ await build({ entryPoints: ['entry.mjs'], bundle: true, format: 'esm', platform:
     npm: run('npm', ['--version'], consumer).stdout.trim(),
     packages: versions,
     tarballs: Object.fromEntries(tarballs.map(path => [path.split(/[\\/]/).at(-1), sha256(path)])),
+    distMatchesSource: dist,
+    lifetime: { exitedByItselfAfterMs: lifetime.elapsedMs, stages: lifetime.stages },
     output: { 'dist/app.js': sha256(join(consumer, 'dist', 'app.js')) },
   }
   console.log(JSON.stringify(record, null, 2))

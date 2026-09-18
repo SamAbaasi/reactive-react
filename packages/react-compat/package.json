@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/react-compat",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "React hooks API on top of signals: useState, useEffect, useReducer, useContext, and more",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,13 +18,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@rrjs/signals": "^0.2.1"
+    "@rrjs/signals": "^0.2.2"
   },
   "devDependencies": {
     "vitest": "^1.0.0",
@@ -35,7 +35,7 @@
   "author": "Saman Abaasi <samyar1992@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SamAbaasi/reactive-react.git",
+    "url": "git+https://github.com/SamAbaasi/reactive-react.git",
     "directory": "packages/react-compat"
   },
   "keywords": [

@@ -17,8 +17,10 @@ Inline effects with a nonempty literal dependency array now accept direct state
 dependencies. The compiler creates a dependency getter and captures current
 values per setup, so the previous cleanup retains its own values. An owned signal
 watcher schedules passive cleanup/setup without re-entering the component.
-Omitted dependencies, callback indirection, layout-effect dependency compilation
-and broader scheduling remain unsupported.
+Callback indirection, layout-effect dependency compilation and broader scheduling
+remain unsupported. Omitted dependencies were unsupported when this phase closed;
+the compiler now infers the array from the reactive bindings the callback reads,
+as `docs/COMPAT.md` describes.
 
 The identical-source fixture in `apps/compat-audit/tests/phase3.test.ts` uses
 independent React and target JSX compilation. It asserts matching mount and
@@ -26,8 +28,9 @@ cleanup traces, initial-state snapshots, a state update without effect replay,
 retained DOM identity, one target body execution, no reconciler entry, and no
 reactive work after disposal. It also compares later-declared state capture and
 declaration-order cleanup for multiple effects. A separate target invariant
-covers pre-flush cancellation. Rejection tests are negative controls for omitted
-or changing dependencies and indirect callbacks.
+covers pre-flush cancellation. Rejection tests are negative controls for an
+indirect callback, a non-literal dependency array and a third argument; the same
+file asserts that an omitted array compiles.
 
 ## Before result
 

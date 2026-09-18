@@ -1,7 +1,7 @@
 {
   "name": "@rrjs/babel-plugin",
-  "version": "0.2.1",
-  "description": "Babel plugin that compiles JSX to h() calls with reactive bindings for Reactive React",
+  "version": "0.2.2",
+  "description": "Babel plugin that compiles React components to run once, with reactive bindings and direct DOM updates",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,7 +18,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build && npm test"
@@ -36,13 +36,13 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "@rrjs/renderer": "^0.2.1"
+    "@rrjs/renderer": "^0.2.2"
   },
   "author": "Saman Abaasi <samyar1992@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SamAbaasi/reactive-react.git",
+    "url": "git+https://github.com/SamAbaasi/reactive-react.git",
     "directory": "packages/babel-plugin"
   },
   "keywords": [

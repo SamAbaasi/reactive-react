@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.2
+
+Found by checking 0.2.1 as the registry serves it: each package's source was
+compiled again and compared, file by file, with the published `dist/`. No runtime
+code changed.
+
+- `@rrjs/react-compat` and `@rrjs/renderer` 0.2.0 and 0.2.1 shipped four files
+  that no committed source produces: `dist/react.js`, `dist/react.d.ts` and their
+  source maps, output of an uncommitted compatibility-mode experiment. `tsc` never
+  deletes output whose source has gone, and each package publishes `dist/` whole.
+  Nothing imported the files and the package `exports` did not expose them, but
+  the renderer's copy describes a mode that reconciles and re-executes
+  components, which this package does not do. `npm run build` and
+  `scripts/build-all.mjs` now empty `dist/` first.
+- The consumer gate compiles each package's source afresh and requires the packed
+  `dist/` to hold the same files with the same content; source maps may differ
+  only in the path from the map to its source. A stray, missing or changed file
+  and a changed source map each fail it.
+- The gate's lifetime check used one timeout for starting, finishing and exiting,
+  so a slow start would have been reported as a package keeping Node alive. The
+  check now records each stage in a file and times the two separately: a script
+  that never reaches its last line is reported as not checked, and one that
+  reaches it and stays running as keeping Node alive.
+- The npm descriptions of `@rrjs/renderer` and `@rrjs/babel-plugin` described the
+  older compiler path; they now match the package READMEs. The repository URL
+  uses npm's normalised `git+https` form, which removes the publish warning.
+
+Internal dependency ranges are `^0.2.2`.
+
 ## 0.2.1
 
 Two defects found by installing 0.2.0 from npm into an empty directory, after it

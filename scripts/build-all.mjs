@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-/** tsc every package, in dependency order. */
+/** Clear dist/ and tsc every package, in dependency order. */
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -15,6 +15,10 @@ for (const name of ORDER) {
     console.error(`typescript missing in packages/${name} — run: npm run install:all`)
     process.exit(1)
   }
+  // tsc never deletes output whose source has gone, and each package publishes
+  // dist/ whole: @rrjs/react-compat and @rrjs/renderer 0.2.0 and 0.2.1 shipped
+  // files compiled from an experiment that was never committed.
+  rmSync(join(dir, 'dist'), { recursive: true, force: true })
   const r = spawnSync(process.execPath, [tsc], { cwd: dir, stdio: 'inherit' })
   if (r.status !== 0) process.exit(r.status ?? 1)
   console.log(`built @rrjs/${name}`)
