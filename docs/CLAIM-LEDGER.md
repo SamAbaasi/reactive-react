@@ -27,7 +27,7 @@ supports a performance claim.
 | The compiler infers arbitrary module contracts | Unsupported | “Manual exact-path contracts identify supported imports.” |
 | Opaque replacement lists preserve keyed identity | Unsupported, Phase 5 blocker | “Opaque replacement arrays are rejected.” |
 | Faster, smaller or lower-memory than React | Unverified for the current compiler path. Roadmap P8 | Make no numerical or comparative performance claim. |
-| The published npm packages work in Node tooling | 0.2.0 keeps a Node process alive after `@rrjs/react-compat` or `@rrjs/renderer` is imported, and cannot be loaded with `require()` or named in a synchronous Babel configuration. 0.2.1 fixes both and is published; the release state below records the registry check | “Use 0.2.1 or later.” Do not describe 0.2.0 as working in Jest, Node scripts or other CommonJS tooling. |
+| The published npm packages work in Node tooling | 0.2.0 keeps a Node process alive after `@rrjs/react-compat` or `@rrjs/renderer` is imported, and cannot be loaded with `require()` or named in a synchronous Babel configuration. 0.2.1 fixes both. 0.2.1 and 0.2.2 are published, and the release state below records the registry checks | “Use 0.2.1 or later.” Do not describe 0.2.0 as working in Jest, Node scripts or other CommonJS tooling. |
 
 ## Release state
 
@@ -92,10 +92,26 @@ comparing it with the published `dist/` showed that `@rrjs/react-compat` and
 their source maps: output of an uncommitted experiment that no committed source
 produces. The `exports` map does not expose them and nothing imports them.
 
-**0.2.2 (prepared, not yet published).** Every build empties `dist/` first, and
-the consumer gate compares each packed `dist/` with a fresh compile of its
-source. No runtime code changed. A publish dry run packs 11, 71, 7 and 9 files
-with no warning, and `prepublishOnly` passes 53, 111, 76 and 47 tests.
+**0.2.2 (published 2026-09-18).** Every build empties `dist/` first, and the
+consumer gate compares each packed `dist/` with a fresh compile of its source. No
+runtime code changed. `prepublishOnly` passed 53, 111, 76 and 47 tests.
+
+Verified on the registry the same day. All four are at 0.2.2 and tagged
+`latest`, npm records commit `43663fd` as their `gitHead`, and each tarball
+matches the registry's sha1 and sha512 and is byte-identical both to the tarball
+verified before publishing and to a local pack of that commit. They hold 11, 71,
+7 and 9 files, and each `dist/` equals a fresh compile of the source file for
+file; the same comparison fails on 0.2.1's `react-compat` and `renderer` with
+the four stray files. They were uploaded in dependency order. npm now accepts an
+upload and processes it asynchronously, so each version appeared on the registry
+a few minutes after its upload was accepted.
+
+Installed into an empty folder, where all 106 installed packages carry verified
+registry signatures, 0.2.2 passes every check listed for 0.2.1 above, including
+the counter matching React 19.3.0 at each of four steps with its body executed
+once. On that first run in the new folder the lifetime script took 28.9 s before
+exiting by itself with its effect run, longer than the 20 s limit the gate used
+before 0.2.2.
 
 ## Differences from React that must be stated, not omitted
 
