@@ -57,6 +57,14 @@ the behaviour React would produce, so it stops instead of guessing:
   tracked from the expression's reads. `useMemo(() => n * 10, [])` freezes in
   React and stays live here. Asserted against React 19.2 in
   `apps/compat-audit/tests/react-pattern-corpus.test.ts`.
+- Effects caused by a click, key press or other discrete event run one task later
+  than in React. React 18 and later run them before the event dispatch returns;
+  here they run from a message posted to the next task. The DOM updates
+  synchronously on both. Measured in Chrome on the issue app: straight after a
+  checkbox `click()`, React's effect has already set `document.title`; here it has
+  not, and it has one task later. Code that reads an effect's result synchronously
+  after dispatching an event sees the difference. No automated test covers it
+  yet.
 - `useTransition` runs synchronously with no pending state, `useDeferredValue`
   returns its input, and `useInsertionEffect` behaves as a layout effect. These do
   not implement React scheduling.

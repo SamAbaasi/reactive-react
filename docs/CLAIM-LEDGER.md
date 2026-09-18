@@ -121,6 +121,7 @@ before 0.2.2.
 | --- | --- | --- |
 | `useEffect(fn)` with no dependency array | Re-runs when a value the callback reads changes, not after every render. A callback reading nothing reactive runs once; React reaches `"xx"` where this reaches `"x"` | `apps/compat-audit/tests/effect-inferred-deps.test.ts`, which asserts both sides |
 | `count()` on a non-callable state value | Rejected at build time rather than failing on first interaction | `apps/compat-audit/tests/runonce-constructs.test.ts` |
+| `useEffect` after a click or key press | React 18 and later run the effects of a discrete event before the dispatch returns; here they run in the next task. The DOM updates synchronously on both | Measured in Chrome on the issue app, 2026-09-18: straight after a checkbox `click()` React's `document.title` had changed and the target's changed one task later. No automated test yet; see `docs/COMPAT.md` |
 | `useTransition`, `useDeferredValue`, `useInsertionEffect` | Present but do not implement React scheduling | `docs/COMPAT.md` |
 | `useMemo` and `useCallback` dependency arrays | Ignored; dependencies come from the expression's reads. `useMemo(() => n * 10, [])` freezes in React and stays live here | `apps/compat-audit/tests/react-pattern-corpus.test.ts`, which measures both sides |
 
