@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/babel-plugin",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Babel plugin that compiles React components to run once, with reactive bindings and direct DOM updates",
   "type": "module",
   "main": "./dist/index.js",
@@ -36,7 +36,7 @@
     "vitest": "^1.0.0"
   },
   "peerDependencies": {
-    "@rrjs/renderer": "^0.2.2"
+    "@rrjs/renderer": "^0.2.3"
   },
   "author": "Saman Abaasi <samyar1992@gmail.com>",
   "license": "MIT",

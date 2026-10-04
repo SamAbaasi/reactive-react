@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 (2026-10-04)
 
 - `useReducer`, `useMemo` and `useCallback` imported from `react` (or
   `@rrjs/react-compat`) were refused by the run-once compiler as unsupported hooks.

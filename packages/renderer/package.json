@@ -1,6 +1,6 @@
 {
   "name": "@rrjs/renderer",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Signal-driven DOM renderer. Compiled code applies list operations directly; the keyed list() reconciler serves the runOnce: false path. No VDOM.",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,8 +24,8 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
-    "@rrjs/signals": "^0.2.2",
-    "@rrjs/react-compat": "^0.2.2"
+    "@rrjs/signals": "^0.2.3",
+    "@rrjs/react-compat": "^0.2.3"
   },
   "devDependencies": {
     "vitest": "^1.0.0",
