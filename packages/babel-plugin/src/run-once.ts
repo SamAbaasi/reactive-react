@@ -262,6 +262,10 @@ export function compileRunOnce(
 
   // Import spelling can hide a hook from call-site name checks. Only direct
   // named supported hook calls have established state-binding semantics.
+  // The useReducer, useMemo and useCallback rewrites above replace their call
+  // sites, so refresh the bindings first: otherwise an import of one of those
+  // hooks still counts the calls that no longer exist and is refused.
+  program.scope.crawl()
   program.traverse({
     ImportSpecifier(path) {
       const imported = path.node.imported

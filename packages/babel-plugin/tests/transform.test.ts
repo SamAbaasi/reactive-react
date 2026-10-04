@@ -311,3 +311,20 @@ describe('default options compile the runOnce path', () => {
     }
   })
 })
+
+// useReducer, useMemo and useCallback are rewritten before the import check runs.
+// Ordinary React imports its hooks, so an import of a rewritten hook must still compile.
+describe('runOnce: supported hooks imported from react', () => {
+  it.each([
+    ['useReducer', `import { useReducer } from 'react'; function C(){ const [s,d]=useReducer((a,x)=>a+x,0); return <b onClick={()=>d(1)}>{s}</b> }`],
+    ['useMemo', `import { useMemo } from 'react'; function C({ n }){ const m=useMemo(()=>n*2,[n]); return <b>{m}</b> }`],
+    ['useCallback', `import { useCallback, useState } from 'react'; function C(){ const [n,setN]=useState(0); const f=useCallback(()=>setN(n+1),[n]); return <b onClick={f}>{n}</b> }`],
+  ])('compiles an imported %s', (_name, source) => {
+    expect(() => transform(source, { runOnce: true })).not.toThrow()
+  })
+
+  it('still refuses an imported hook it does not support', () => {
+    expect(() => transform(`import { useTransition } from 'react'; function C(){ const [p,s]=useTransition(); return <b>{p}</b> }`, { runOnce: true }))
+      .toThrow(/imported custom or unsupported hooks|not supported/)
+  })
+})
