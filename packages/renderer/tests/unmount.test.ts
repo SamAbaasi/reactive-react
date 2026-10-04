@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { h, mount, unmountNode } from '../src/index'
+import { createSignal } from '@rrjs/signals'
 import { useEffect, useState, useLayoutEffect } from '@rrjs/react-compat'
 
 function nextMacroTask(): Promise<void> {
@@ -138,5 +139,28 @@ it('a second unmount call is safe — cleanups do not fire twice', async () => {
     dispose()
 
     expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+})
+describe('unmountNode detaches only the subtree root', () => {
+  it('removes the root once and still disposes every descendant binding', () => {
+    const [label, setLabel] = createSignal('a')
+    const row = h('tr', null, h('td', null, h('a', null, () => label())), h('td', null, 'x'))
+    const tbody = document.createElement('tbody')
+    tbody.appendChild(row)
+
+    const observer = new MutationObserver(() => {})
+    observer.observe(tbody, { childList: true, subtree: true })
+    unmountNode(row)
+    const removed = observer.takeRecords().flatMap(record => Array.from(record.removedNodes))
+    observer.disconnect()
+
+    // The row is detached once; its descendant elements leave with it instead of
+    // being removed one by one. (A dynamic text binding still removes its own
+    // text node when it is disposed.)
+    expect(removed.filter(node => node.nodeType === Node.ELEMENT_NODE)).toEqual([row])
+    expect(row.parentNode).toBeNull()
+    // The descendant's text binding was disposed: it no longer follows the signal.
+    setLabel('b')
+    expect(row.textContent).not.toContain('b')
   })
 })
