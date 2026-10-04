@@ -115,6 +115,27 @@ once. On that first run in the new folder the lifetime script took 28.9 s before
 exiting by itself with its effect run, longer than the 20 s limit the gate used
 before 0.2.2.
 
+**0.2.3 (published 2026-10-04).** The renderer detaches only the root of an
+unmounted subtree and commits only the list rows an update created; the run-once
+compiler accepts `useReducer`, `useMemo` and `useCallback` imported from `react`;
+JSX text is cleaned the way React's transform does. Before publishing, 293 package
+tests, `verify:node-esm`, `verify:consumer` and the Phase 6 acceptance gate passed.
+
+Verified on the registry the same day. All four are at 0.2.3 and tagged `latest`,
+and npm records commit `43041e3` as their `gitHead` (the release commit is
+`bd2ffc0`; the commit after it only adds `talk/jsnation`, outside the packages).
+Each registry tarball is byte-identical to a local pack (sha256), and they hold
+11, 71, 7 and 11 files; babel-plugin's two new files are `dist/jsx-text.js` and
+its declaration, from `src/jsx-text.ts`. Installed into an empty folder outside
+the repository, where all 88 installed packages carry verified registry
+signatures:
+
+- each package imported alone lets Node exit by itself, in 25 to 92 ms;
+- `require()` of all four works;
+- `babel.transformSync` with the plugin named in configuration compiles a
+  component that imports `useReducer` from `react`;
+- unmounting a table row with nested cells detaches only the row element.
+
 ## Differences from React that must be stated, not omitted
 
 | Behaviour | Difference | Evidence |
