@@ -1,253 +1,159 @@
 # Benchmarks
 
-> ## ⚠ Correction — these figures are being re-measured
->
-> The numbers below are not currently reliable and are retained, marked, until a verified
-> revision replaces them.
->
-> **`update_10th` measured a no-op.** The benchmark adapter changed a row's label while
-> keeping its id. `@rrjs/renderer`'s keyed reconciler reused the row's DOM node and never
-> delivered the new content to it, so the update never reached the DOM. The reported
-> 59 ms — and its 3.2 ms script time — is the cost of doing nothing, compared against
-> React performing the real work. The defect is fixed in the renderer; see
-> [KEYED-LISTS.md](./KEYED-LISTS.md). The figure has not yet been
-> re-measured against the corrected library.
->
-> **The script/paint splits cannot be regenerated from anything in this repository.** The
-> only harness present is the in-page `window.bench.run()` in `apps/benchmark`, which
-> measures with a single `requestAnimationFrame`. That callback fires before paint, so
-> that harness cannot produce a script/paint split, and it measures eight tests, not the
-> nine listed here. Wherever the splits came from, it was not this repository, and they
-> are unverifiable as published.
->
-> **Every Reactive React number carries instrumentation overhead.** `apps/benchmark`
-> overrides `Element.prototype.setAttribute`, `removeAttribute` and `className` at module
-> load for a mutation counter. The overrides are live during measurement and apply to the
-> Reactive React side only.
->
-> **The adapter is not a conforming js-framework-benchmark entry.** It has no
-> `js-framework-benchmark` config block and is not laid out under `frameworks/keyed/`, so
-> it has not passed the harness's keyed validation.
->
-> A verified revision is in preparation: a conforming adapter in both signal-optimised and
-> idiomatic-React forms, run on the official harness, with medians and run-to-run spread
-> reported for every figure.
+Measured 4 October 2026 with the official
+[js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) harness.
+Raw results for every run are in
+[`bench-results/2026-10-04-jsfb/`](../bench-results/2026-10-04-jsfb/).
 
-Reactive React's performance measured against React 19.2.0 using the official [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) Chrome harness.
+## What is measured — and what is not
 
-These numbers are **directly comparable** — both Reactive React and React 19 were run on the same hardware, in the same Chrome session, with identical 4× CPU throttling, by the same benchmark adapter pattern.
+**Measured:** the engine. [`apps/benchmark/keyed-signals`](../apps/benchmark/keyed-signals)
+is written directly against `@rrjs/signals` and `@rrjs/renderer`: one signal per row
+label, and the renderer's keyed `list()` for rows. This is the signal-plus-renderer
+runtime the packages ship.
 
----
+**Not measured:** compiled React code. The run-once compiler cannot compile this
+workload yet. The official `keyed/react-hooks` adapter is refused at build time
+(destructured `useReducer` state, `memo`, a keyed `<Row>` component list), and a
+`useState` rewrite of the same app is refused for create, append, update-every-10th
+and swap: replacement arrays without established provenance are rejected rather than
+reconciled (see [RUN-ONCE.md](./RUN-ONCE.md), "Next compiler work"). So these numbers
+say nothing about "unmodified React code on signals". They describe the engine
+underneath it.
 
-## Methodology
+The reference is the unmodified `keyed/react-hooks` adapter from the harness
+(React 19.2.0).
 
-- **Test suite**: official `js-framework-benchmark` Chrome harness with CDP-based timing
-- **CPU throttling**: 4× (standard for this benchmark)
-- **Iterations**: 15 per test, median reported *(unverified — the in-page harness in this repo uses 10, and 3 for create10k)*
-- **Hardware**: Lenovo laptop, Intel CPU, Windows 11
-- **Browser**: Chrome (latest stable)
-- **React version compared**: React 19.2.0 keyed hooks adapter
-- **Reactive React version**: v0.1.0 with all v0.1 optimizations applied
+## Setup
 
-These are not comparisons against the public leaderboard's reference hardware. They are direct head-to-head comparisons on consumer hardware where both frameworks were measured with the same throttling and harness. Library users on similar consumer hardware should see comparable relative performance.
+| | |
+|---|---|
+| Harness | js-framework-benchmark `b235f75` (4 Oct 2026), webdriver-ts runner |
+| Browser | Chrome 154.0.8037.58, headless |
+| Machine | MacBook Pro (M1, 8 GB), macOS 14.4.1, Node 22.17.0 |
+| CPU runs | 15 per test (25 for select row), median reported, none dropped |
+| Throttling | harness defaults: 4× for update, select, swap and clear; 2× for remove |
+| Memory runs | 10 per test |
+| Keyed check | both adapters pass the harness's `isKeyed` test |
 
-~~The Reactive React adapter uses per-row signals for label updates — the fastest pattern the library supports.~~ **Incorrect: the adapter used plain values, not per-row signals. That is why its updates never reached the DOM.** Both a signal-optimised and an idiomatic adapter are being built and will be measured separately.
+The numbers are not comparable with the public leaderboard, which uses different
+hardware. The two columns are comparable with each other: same machine, same browser
+session, same harness.
 
----
+## CPU (ms, lower is better)
 
-## CPU Tests — Direct Comparison
+Median, with min–max over the runs. React and the engine were measured in the same
+session.
 
-| Test | Reactive React | React 19.2.0 | Verdict |
-|------|----------------|--------------|---------|
-| Create 1,000 rows | 75 ms | 66 ms | React faster by 14% |
-| Replace 1,000 rows | 83 ms | 76 ms | React faster by 9% |
-| ~~Update every 10th row~~ | ~~59 ms~~ | ~~54 ms~~ | **INVALID — measured a no-op, see correction above** |
-| Select row | **16 ms** | 20 ms | **Reactive React faster by 20%** |
-| Swap rows | **78 ms** | 419 ms | **Reactive React faster by 5.4×** ★ |
-| Remove one row | 55 ms | 39 ms | React faster by 41% |
-| Create 10,000 rows | 1545 ms | 1235 ms | React faster by 25% |
-| Append 1,000 rows | 84 ms | 74 ms | React faster by 13% |
-| Clear | **49 ms** | 52 ms | **Reactive React faster by 6%** |
+| Test | React 19.2 | Engine | Result |
+|---|---|---|---|
+| Swap rows | 137.3 (129.1–148.3) | **26.7** (23.7–30.0) | engine 5.1× faster |
+| Update every 10th row | 22.3 (20.7–27.9) | **18.4** (17.6–22.0) | engine 1.2× faster |
+| Create 10,000 rows | 645.7 (630.9–714.1) | **532.9** (506.5–560.3) | engine 1.2× faster |
+| Remove one row | 21.9 (18.3–25.2) | 19.3 (17.4–24.7) | on par (ranges overlap) |
+| Select row | 9.8 (9.0–15.5) | 9.7 (8.8–13.7) | on par |
+| Create 1,000 rows | **34.7** (34.0–35.6) | 44.4 (43.3–47.4) | React 1.28× faster |
+| Append 1,000 rows | **44.3** (41.7–47.7) | 53.4 (51.1–55.4) | React 1.21× faster |
+| Replace 1,000 rows | **43.5** (41.7–45.6) | 63.6 (62.0–66.2) | React 1.46× faster |
+| Clear | **27.5** (24.3–30.0) | 77.1 (72.0–115.2) | React 2.8× faster |
 
-**Summary: Reactive React wins on 3 tests, loses on 6. The swap_rows win is the largest single performance gap in either direction.**
+### Script and paint
 
----
+Paint time is nearly identical on both sides in every test except swap. The
+differences are almost entirely JavaScript.
 
-## Bundle Size
+| Test | Script: React / engine | Paint: React / engine |
+|---|---|---|
+| Swap rows | 28.0 / **3.0** | 106.0 / **20.5** |
+| Update every 10th row | 6.1 / **2.2** | 13.8 / 13.5 |
+| Create 10,000 rows | 315.1 / **198.3** | 320.7 / 318.5 |
+| Remove one row | 1.9 / 1.5 | 17.6 / 15.9 |
+| Select row | 4.1 / 4.4 | 4.1 / 3.9 |
+| Create 1,000 rows | **7.8** / 17.0 | 26.1 / 26.7 |
+| Append 1,000 rows | **9.6** / 18.7 | 32.7 / 33.0 |
+| Replace 1,000 rows | **15.5** / 35.6 | 26.7 / 27.4 |
+| Clear | **23.6** / 74.1 | 1.8 / 1.7 |
 
-| Metric | Reactive React | React + ReactDOM | Ratio |
-|--------|----------------|------------------|-------|
-| Uncompressed | **16.1 kB** | ~140 kB | **8.7× smaller** |
-| Compressed (gzip) | **4.2 kB** | ~46 kB | **11× smaller** |
+## Memory (MB, lower is better)
 
-This is the largest practical advantage. Smaller bundles mean faster downloads, faster parse times, and lower data costs on mobile networks.
+Median of 10 runs, measured before the renderer change below (which touches teardown
+and list commits, not allocation).
 
----
+| Test | React 19.2 | Engine |
+|---|---|---|
+| Ready, no rows | 1.15 (1.10–1.19) | **0.61** (0.59–0.62) |
+| 1,000 rows | **4.43** (4.31–4.43) | 5.07 (5.07–5.08) |
+| 1,000 rows, then clear | 1.92 (1.86–1.98) | **0.87** (0.79–0.88) |
 
-## Memory
+## Size
 
-| Metric | Reactive React | React 19 | Ratio |
-|--------|----------------|----------|-------|
-| Ready (no rows) | **0.59 MB** | ~1.2 MB | 51% less |
-| After 1k rows | **3.5 MB** | ~5.5 MB | 36% less |
-| After clear of 1k rows | 13.7 MB | ~14 MB | comparable |
+| | React 19.2 adapter | Engine adapter |
+|---|---|---|
+| Uncompressed | 190.3 kB | **14.9 kB** |
+| Compressed | 51.4 kB | **4.9 kB** |
 
----
+## Reading the results
 
-## Startup
+A signal records who read it, so a change reaches exactly those readers. That is
+where the engine wins: swap moves two rows instead of having the list re-laid out
+(React paints 106 ms against 20.5), and update-every-10th writes 100 text nodes.
 
-| Metric | Reactive React | React 19 |
-|--------|----------------|----------|
-| First paint | **155 ms** | ~280 ms |
-| **Improvement** | | **45% faster** |
+Recording costs something too. Every row creates its bindings' subscriptions, and
+removing a row disposes them. That is where React wins: create, append, replace and,
+most of all, clear, where 1,000 rows of subscriptions are disposed at once.
 
----
+Select row is a tie because the adapter has every row read `selected()`, so a
+selection re-checks 1,000 class bindings. A per-row selector would make it a direct
+update; the adapter keeps the plain form.
 
-## Honest Analysis
+## Renderer change made during this measurement
 
-### Where Reactive React Wins
+The first run exposed two inefficiencies in `@rrjs/renderer`, fixed before the CPU
+run above:
 
-**Swap rows is the headline result.** React 19 takes 419 ms to swap two rows in a 1000-row table on consumer hardware. Reactive React does it in 78 ms — a **5.4× improvement**. This matters for real applications that reorder lists, support drag-and-drop, or animate table sorts.
+- Unmounting a subtree detached every descendant from its parent individually, one
+  live DOM mutation per node. Only the subtree root is detached now.
+- After every keyed reconcile, `list()` re-committed all rows, not only new ones. It
+  now commits only rows created by that update.
 
-The win comes from Reactive React's keyed list reconciliation. When two rows swap, only those two nodes are moved in the DOM. React's reconciler must walk the entire child set and apply the new order; the LIS-based algorithm in `@rrjs/renderer` identifies the minimal set of DOM mutations.
+Package tests (292), integration tests (175), the run-once gate and the Phase 6 gate
+(15 Chrome checkpoints against React 19.2, 11 instances entered and disposed once, no
+reconciler entry) pass with the change. Engine before and after, same harness:
 
-**Bundle size, memory, and first paint are dominant wins** that derive from the architectural choice to skip the virtual DOM. No diff algorithm, no fiber tree, no scheduler. Bundle is 11× smaller, memory is roughly 36% lower, first paint is 45% faster.
+| Test | Before (median, script) | After (median, script) |
+|---|---|---|
+| Swap rows | 41.2 (20.9) | **26.7 (3.0)** |
+| Remove one row | 26.4 (10.4) | **19.3 (1.5)** |
+| Clear | 86.2 (83.9) | 77.1 (74.1) |
+| Append 1,000 rows | 54.7 (22.2) | 53.4 (18.7) |
 
-**Select row and clear** show the signal architecture working as designed. Targeted updates touch only the bindings that read the changed signal. There's no global re-render to trigger downstream comparisons.
+## Reproducing
 
-### Where Reactive React Trails
-
-**Creation-heavy operations** (create_1k, replace_1k, create_10k, append_1k) trail React by 9-25%. The gap is paint-bound — your JavaScript creates 1,000 DOM nodes, the browser paints them, and there's no JavaScript-side optimization that reduces the paint cost.
-
-The script time on these tests is competitive (often faster than React). The paint is what's expensive, and CSS-level optimization tools like `contain` have limited effectiveness for `<table>` layout where columns must coordinate.
-
-**Remove one row** is the largest remaining gap (41%). Like creation, it's paint-bound — the browser relays out the entire table when one row is removed.
-
-These gaps are architectural in nature. Closing them requires either:
-- Virtualization (rendering fewer DOM nodes, not all 1,000) — out of scope for the benchmark
-- Compile-time static binding analysis in the Babel plugin to reduce per-row effect overhead — planned for v0.2
-
----
-
-## Test-by-Test Breakdown
-
-Each test includes the median total time, plus the script/paint split. Script time is your JavaScript executing. Paint time is browser layout and rendering.
-
-**The splits below cannot be regenerated from this repository — see the correction at the
-top of this file. Treat every script/paint pair here as unverified.**
-
-```
-01_run1k (Create 1,000 rows)
-   Reactive React: total=75ms  (script=15.7  paint=59.0)
-   React 19.2.0:   total=66ms  (script=16.1  paint=48.5)
-   Note: Script is essentially tied. Paint gap of 10ms is the difference.
-
-02_replace1k (Replace 1,000 rows)
-   Reactive React: total=83ms  (script=20.4  paint=60.1)
-   React 19.2.0:   total=76ms  (script=25.9  paint=48.7)
-   Note: Reactive React's script is 5ms faster than React. Paint is 11ms slower.
-
-03_update10th1k_x16 (Update every 10th row)   *** INVALID — see correction at top ***
-   Reactive React: total=59ms  (script=3.2   paint=46.2)   <- measured a no-op
-   React 19.2.0:   total=54ms  (script=10.7  paint=36.5)
-   Note: the original note claimed "per-row signals are O(100), not O(1000)". The adapter
-   did not use per-row signals; rows carried plain values, and the reconciler never
-   delivered changed content to a reused row, so no DOM update occurred at all.
-
-04_select1k (Select row)  ★ WIN
-   Reactive React: total=16ms  (script=2.2   paint=10.8)
-   React 19.2.0:   total=20ms  (script=5.7   paint=10.8)
-   Note: Reactive React's script is 3.5ms faster. Paint is identical.
-
-05_swap1k (Swap rows)  ★ WIN BY 5×
-   Reactive React: total=78ms  (script=4.3   paint=57.8)
-   React 19.2.0:   total=419ms (script=54.4  paint=344.5)
-   Note: Reactive React's LIS reconciler moves 2 nodes. React relayouts the
-   entire table area between rows 2 and 998.
-
-06_remove-one-1k (Remove one row)
-   Reactive React: total=55ms  (script=1.6   paint=50.0)
-   React 19.2.0:   total=39ms  (script=3.4   paint=32.2)
-   Note: Reactive React's script is faster. React's paint is faster.
-   Likely difference: React's <td> elements have different layout characteristics.
-
-07_create10k (Create 10,000 rows)
-   Reactive React: total=1545ms (script=260.7 paint=1256.8)
-   React 19.2.0:   total=1235ms (script=493.6 paint=736.2)
-   Note: Reactive React's script is 2× faster. React's paint is 1.7× faster.
-   This is the noisiest test on this hardware (high stddev).
-
-08_create1k-after1k (Append 1,000 rows)
-   Reactive React: total=84ms  (script=15.9  paint=65.9)
-   React 19.2.0:   total=74ms  (script=17.6  paint=55.2)
-   Note: Script is roughly tied. Paint is 11ms slower.
-
-09_clear1k_x8 (Clear list)  ★ WIN
-   Reactive React: total=49ms  (script=42.1  paint=4.5)
-   React 19.2.0:   total=52ms  (script=47.9  paint=2.8)
-   Note: Range.deleteContents() in @rrjs/renderer beats React's mass-unmount.
+```sh
+git clone --depth 1 https://github.com/krausest/js-framework-benchmark.git
+cd js-framework-benchmark/server && npm ci && npm start
+# in another terminal
+cd js-framework-benchmark/webdriver-ts && npm ci && npm run compile
+cd ../frameworks/keyed/react-hooks && npm ci && npm run build-prod
 ```
 
----
+Build `apps/benchmark/keyed-signals` (`npm install && npm run build-prod`) and copy its
+`package.json`, `package-lock.json`, `index.html` and `dist/` into
+`frameworks/keyed/reactive-react-signals`. The lockfile entry for `@rrjs/renderer` is a
+local link with no version, so set `packages["node_modules/@rrjs/renderer"].version` in
+the copy, or the harness reports the version as missing. Then, from `webdriver-ts`:
 
-## What These Numbers Mean for Your App
-
-If your application is **bundle-size sensitive** — mobile-first, marketing pages, embedded widgets — Reactive React's 4.2 kB bundle is the deciding factor. Loading 42 fewer kilobytes on every page visit translates to measurable improvements in user-perceived latency and bounce rate.
-
-If your application involves **reordering, sorting, or drag-and-drop** — the swap_rows result generalizes. Reactive React's keyed reconciler is dramatically faster than React's VDOM diff for operations that move existing DOM nodes around.
-
-If your application is **memory-constrained** — mobile devices, embedded browsers, IoT — Reactive React uses about a third less memory than React for typical workloads.
-
-If your application is **dominated by mass row creation** — data-heavy dashboards rendering thousands of new rows on every navigation — React 19 remains a touch faster on raw creation. The gap is small (10-15% on most creation tests) and shrinking with each release.
-
----
-
-## Reproducing These Numbers
-
-The benchmark adapter is in [`apps/benchmark`](./apps/benchmark). The exact React 19 adapter compared against is the official one in [`krausest/js-framework-benchmark`](https://github.com/krausest/js-framework-benchmark/tree/master/frameworks/keyed/react-hooks).
-
-To reproduce:
-
-```bash
-# Clone js-framework-benchmark
-git clone https://github.com/krausest/js-framework-benchmark
-cd js-framework-benchmark
-
-# Add Reactive React adapter
-# (use apps/benchmark/src/main.tsx from this repo as the template)
-
-# Run the benchmark
-cd webdriver-ts
-npm install
-npm run bench keyed/reactive-react
-npm run bench keyed/react-hooks
+```sh
+node dist/isKeyed.js --framework keyed/react-hooks keyed/reactive-react-signals --headless true
+node dist/benchmarkRunner.js --framework keyed/react-hooks keyed/reactive-react-signals --headless true
 ```
 
-Results are saved to `webdriver-ts/results/`. Numbers will vary by machine. The relative comparisons (faster/slower) are more stable than absolute times.
+Add `--chromeBinary <path>` to use an installed Chrome.
 
----
+## Earlier figures
 
-## Caveats
-
-These numbers measure DOM-update performance under CPU throttling. Real applications also pay for network latency, server-side rendering time, and developer-introduced overhead.
-
-The Reactive React adapter uses per-row signals for label updates, which the library supports as a first-class pattern but which is not the most idiomatic React translation. Library users who write React-style immutable updates will see slower numbers on `update_10th` (probably 1.5-2× slower).
-
-This `BENCHMARKS.md` will be updated when:
-- The Reactive React idiomatic adapter is benchmarked separately
-- The library is officially submitted to the public leaderboard (planned for v0.2)
-- v0.2 lands with compile-time static binding analysis that closes the creation-test gaps
-
----
-
-## v0.2 Roadmap
-
-v0.2 will address:
-
-- **Per-binding fine-grained subscription** to reduce per-row effect overhead on selection/swap/remove operations
-- **Compile-time static prop hoisting** in the Babel plugin to skip the effect wrapper for non-reactive bindings
-- **Server-side rendering** and hydration support
-- **Official js-framework-benchmark submission** with both signal-optimized and idiomatic adapters
-- **Real-world benchmark suite** measuring Time to Interactive, Largest Contentful Paint, and interaction latency
-
-The targeted-update numbers should approach SolidJS parity. The creation-test gap to React should close. This document will be updated when v0.2 ships.
+Benchmarks published with v0.1 were withdrawn: the update-every-10th result measured
+a no-op, the script/paint splits could not be regenerated, the adapter carried
+mutation-counting instrumentation, and the figures described an implementation that
+has since changed. They remain in this file's git history and in
+[`bench-results/`](../bench-results/) for reference; nothing above depends on them.

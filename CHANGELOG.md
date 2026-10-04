@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `useReducer`, `useMemo` and `useCallback` imported from `react` (or
+  `@rrjs/react-compat`) were refused by the run-once compiler as unsupported hooks.
+  Their call sites are rewritten before the import check, which read stale bindings.
+  The check now refreshes them; ordinary imports of these hooks compile.
+- The renderer detached every descendant of an unmounted subtree individually, one
+  live DOM mutation per node; only the subtree root is detached now. After every keyed
+  reconcile, `list()` re-committed every row; it now commits only rows it created.
+  In js-framework-benchmark, swap rows went from 41.2 ms to 26.7 ms and remove one row
+  from 26.4 ms to 19.3 ms.
+- New benchmark results for the engine against React 19.2 on the official
+  js-framework-benchmark harness replace the withdrawn v0.1 figures. See
+  `docs/BENCHMARKS.md`.
 - JSX text now comes out the way React's JSX transform leaves it. The compiler
   emitted each text child verbatim, so `{name} theme` followed by a line break
   and indentation kept both: the issue app's theme button read

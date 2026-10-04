@@ -80,7 +80,7 @@ current package results. Test counts alone do not establish React compatibility.
 
 ## Performance
 
-Historical measurements and raw artifacts are available in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) and bench-results/. They are not current-branch measurements. Runtime correctness fixes change the measured implementation; performance must be rerun after behavior matches.
+The engine — `@rrjs/signals` and `@rrjs/renderer`, written against directly — was measured against React 19.2 with the official js-framework-benchmark harness on 4 October 2026. It is 5.1× faster at swapping rows and about 1.2× faster at updating every 10th row and creating 10,000 rows; React is faster at creating, appending and replacing 1,000 rows and 2.8× faster at clearing them. The engine bundle is 4.9 kB compressed against 51.4 kB. Compiled React code is not covered: the run-once compiler cannot compile this workload yet. Method, full results and raw data: [docs/BENCHMARKS.md](./docs/BENCHMARKS.md).
 
 ## How It Works
 
@@ -129,7 +129,7 @@ See [`docs/COMPAT.md`](./docs/COMPAT.md) for the full compatibility contract.
 - [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) — architecture walkthrough
 - [`docs/EFFECT-TIMING.md`](./docs/EFFECT-TIMING.md) — `useEffect` vs `useLayoutEffect` deep dive
 - [`docs/MIGRATION.md`](./docs/MIGRATION.md) — Vite/Webpack setup, code translation patterns
-- [`BENCHMARKS.md`](./BENCHMARKS.md) — full benchmark methodology and results
+- [`docs/BENCHMARKS.md`](./docs/BENCHMARKS.md) — benchmark method, results and raw data
 
 ---
 

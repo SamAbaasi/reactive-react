@@ -1,0 +1,1 @@
+{"framework":"reactive-react-signals-v0.2.2-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":0.6164474487304688,"max":0.6164474487304688,"median":0.6164474487304688,"mean":0.6164474487304688,"stddev":null,"values":[0.6164474487304688]}}}
